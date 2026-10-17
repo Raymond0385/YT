@@ -142,3 +142,7 @@ CapShorts/backend/dist/
 CapShorts/backend/build/
 CapShorts/src-tauri/gen/
 CapShorts/src-tauri/target/
+
+CapShorts/backend/fonts.conf
+CapShorts/backend/fontcache/
+CapShorts/src-tauri/binaries/fonts/
