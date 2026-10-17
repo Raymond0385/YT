@@ -4,6 +4,8 @@ export interface WordToken {
   end: number;
   word: string;
   keyword: boolean;
+  /** Recognition confidence 0..1 (undefined/null = unknown or verified by the user) */
+  confidence?: number | null;
 }
 
 export interface SubtitlePreset {

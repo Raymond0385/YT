@@ -171,6 +171,7 @@ interface SubtitlePhraseBlock {
   end: number;
   text: string;
   hasKeyword: boolean;
+  lowConfidence: boolean;
 }
 
 interface SubtitleBlockProps {
@@ -194,7 +195,7 @@ const SubtitleBlock: React.FC<SubtitleBlockProps> = React.memo(({
   return (
     <div
       onClick={(e) => onClick(block, e)}
-      title={block.text}
+      title={block.lowConfidence ? `${block.text} (uncertain - please check)` : block.text}
       style={{
         left: `${leftPx}px`,
         width: `${widthPx}px`,
@@ -202,6 +203,8 @@ const SubtitleBlock: React.FC<SubtitleBlockProps> = React.memo(({
       className={`absolute top-2 bottom-2 rounded-lg border flex items-center justify-between px-2 text-xs font-semibold select-none overflow-hidden cursor-pointer transition-all ${
         isSelected
           ? 'bg-amber-500/25 border-amber-400 ring-2 ring-amber-400/80 text-amber-200 shadow-lg shadow-amber-500/20 z-10'
+          : block.lowConfidence
+          ? 'bg-rose-500/20 border-rose-400/70 border-dashed text-rose-200 hover:bg-rose-500/30'
           : block.hasKeyword
           ? 'bg-gradient-to-r from-amber-500/20 to-yellow-500/15 border-amber-500/40 text-amber-200 hover:border-amber-400 hover:bg-amber-500/25'
           : 'bg-zinc-800/80 border-white/[0.08] text-zinc-200 hover:border-white/20 hover:bg-zinc-800 shadow-xs'
@@ -266,7 +269,8 @@ const VirtualizedSubtitleTrack: React.FC<VirtualizedSubtitleTrackProps> = React.
       start: w.start,
       end: Math.max(w.end, w.start + 0.05),
       text: w.word,
-      hasKeyword: w.keyword
+      hasKeyword: w.keyword,
+      lowConfidence: typeof w.confidence === 'number' && w.confidence < 0.5
     }));
   }, [transcript]);
 

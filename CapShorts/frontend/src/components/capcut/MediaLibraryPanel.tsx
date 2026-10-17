@@ -53,6 +53,14 @@ export const MediaLibraryPanel: React.FC = () => {
     setSelectedModel,
     glossary,
     setGlossary,
+    enhanceAudio,
+    setEnhanceAudio,
+    retryWeak,
+    setRetryWeak,
+    detectedLanguage,
+    glossarySets,
+    saveGlossarySet,
+    deleteGlossarySet,
     applyGlossaryToTranscript,
     alignTranscriptToText,
     transcript,
@@ -96,6 +104,14 @@ export const MediaLibraryPanel: React.FC = () => {
       setSelectedModel: state.setSelectedModel,
       glossary: state.glossary,
       setGlossary: state.setGlossary,
+      enhanceAudio: state.enhanceAudio,
+      setEnhanceAudio: state.setEnhanceAudio,
+      retryWeak: state.retryWeak,
+      setRetryWeak: state.setRetryWeak,
+      detectedLanguage: state.detectedLanguage,
+      glossarySets: state.glossarySets,
+      saveGlossarySet: state.saveGlossarySet,
+      deleteGlossarySet: state.deleteGlossarySet,
       applyGlossaryToTranscript: state.applyGlossaryToTranscript,
       alignTranscriptToText: state.alignTranscriptToText,
       transcript: state.transcript,
@@ -585,6 +601,18 @@ export const MediaLibraryPanel: React.FC = () => {
                   <option value="ru">Russian (Русский)</option>
                   <option value="ur_script">Urdu Script (اردو خط)</option>
                 </select>
+                {detectedLanguage && selectedLanguage === 'auto' && (
+                  <p
+                    className={`text-[10px] ${detectedLanguage.probability !== null && detectedLanguage.probability < 0.6 ? 'text-amber-400' : 'text-emerald-400'}`}
+                    data-testid="detected-language"
+                  >
+                    Detected: {detectedLanguage.code.toUpperCase()}
+                    {detectedLanguage.probability !== null ? ` (${Math.round(detectedLanguage.probability * 100)}%)` : ''}
+                    {detectedLanguage.probability !== null && detectedLanguage.probability < 0.6
+                      ? ' - not sure. Pick the language manually and generate again.'
+                      : ''}
+                  </p>
+                )}
               </div>
 
               {/* Model Choice */}
@@ -598,7 +626,20 @@ export const MediaLibraryPanel: React.FC = () => {
                   <option value="whisper-large-v3-turbo">⚡ Ultra Fast Cloud Engine (~2-3s) [Recommended]</option>
                   <option value="base">💻 Standard Offline Engine (On-Device)</option>
                   <option value="small">💻 High Accuracy Offline Engine (On-Device)</option>
+                  <option value="turbo">🎯 Turbo - accurate offline (large-v3-turbo, ~1.5 GB first run)</option>
+                  <option value="large-v3">🏆 Large-v3 - best offline accuracy (~3 GB first run, slow)</option>
                 </select>
+              </div>
+
+              <div className="space-y-1.5" data-testid="asr-options">
+                <label className="flex items-start space-x-2 text-[11px] text-zinc-300 cursor-pointer">
+                  <input type="checkbox" checked={enhanceAudio} onChange={(e) => setEnhanceAudio(e.target.checked)} className="mt-0.5 accent-indigo-500" />
+                  <span>Clean up audio first <span className="text-zinc-500">(noise, rumble, loudness)</span></span>
+                </label>
+                <label className="flex items-start space-x-2 text-[11px] text-zinc-300 cursor-pointer">
+                  <input type="checkbox" checked={retryWeak} onChange={(e) => setRetryWeak(e.target.checked)} className="mt-0.5 accent-indigo-500" />
+                  <span>Re-check uncertain parts with the large model <span className="text-zinc-500">(offline engines only, downloads ~1.5 GB once)</span></span>
+                </label>
               </div>
 
               {/* Glossary: names/terms Whisper often mishears */}
@@ -611,6 +652,42 @@ export const MediaLibraryPanel: React.FC = () => {
                   placeholder="ChatGPT, Kubernetes, CapShorts"
                   className="w-full bg-zinc-950/80 border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition-colors resize-none"
                 />
+                <div className="flex items-center space-x-2" data-testid="glossary-sets">
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const found = glossarySets.find((x) => x.name === e.target.value);
+                      if (found) setGlossary(found.terms);
+                    }}
+                    className="flex-1 min-w-0 bg-zinc-950/80 border border-white/[0.08] rounded-lg px-2 py-1 text-[10px] text-zinc-300 cursor-pointer"
+                  >
+                    <option value="">{glossarySets.length ? 'Load saved set...' : 'No saved sets yet'}</option>
+                    {glossarySets.map((x) => (
+                      <option key={x.name} value={x.name}>{x.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => {
+                      const name = window.prompt('Name for this glossary set (e.g. project or channel)');
+                      if (name) saveGlossarySet(name);
+                    }}
+                    disabled={!glossary.trim()}
+                    className="text-[10px] text-indigo-400 hover:underline disabled:opacity-40 disabled:no-underline whitespace-nowrap"
+                  >
+                    Save as set
+                  </button>
+                  {glossarySets.length > 0 && (
+                    <button
+                      onClick={() => {
+                        const name = window.prompt('Delete which saved set? Type its name:\n' + glossarySets.map((x) => x.name).join(', '));
+                        if (name) deleteGlossarySet(name.trim());
+                      }}
+                      className="text-[10px] text-red-400 hover:underline whitespace-nowrap"
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
                 {transcript.length > 0 && (
                   <button
                     onClick={async () => {

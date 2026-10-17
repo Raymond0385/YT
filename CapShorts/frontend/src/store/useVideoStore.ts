@@ -98,6 +98,16 @@ interface VideoStoreState {
   setGlossary: (glossary: string) => void;
   applyGlossaryToTranscript: () => Promise<number>;
   alignTranscriptToText: (text: string) => Promise<boolean>;
+  enhanceAudio: boolean;
+  setEnhanceAudio: (v: boolean) => void;
+  retryWeak: boolean;
+  setRetryWeak: (v: boolean) => void;
+  detectedLanguage: { code: string; probability: number | null } | null;
+  glossarySets: { name: string; terms: string }[];
+  saveGlossarySet: (name: string) => void;
+  deleteGlossarySet: (name: string) => void;
+  markWordVerified: (index: number) => void;
+  selectNextUncertainWord: () => boolean;
 
   // CapCut Desktop Studio State
   projectTitle: string;
@@ -248,6 +258,68 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
   setSelectedLanguage: (selectedLanguage) => set({ selectedLanguage }),
   selectedModel: 'whisper-large-v3-turbo',
   setSelectedModel: (selectedModel) => set({ selectedModel }),
+  enhanceAudio: (() => {
+    try { return localStorage.getItem('capshorts.enhanceAudio') !== '0'; } catch { return true; }
+  })(),
+  setEnhanceAudio: (enhanceAudio) => {
+    try { localStorage.setItem('capshorts.enhanceAudio', enhanceAudio ? '1' : '0'); } catch { /* storage unavailable */ }
+    set({ enhanceAudio });
+  },
+  retryWeak: (() => {
+    try { return localStorage.getItem('capshorts.retryWeak') === '1'; } catch { return false; }
+  })(),
+  setRetryWeak: (retryWeak) => {
+    try { localStorage.setItem('capshorts.retryWeak', retryWeak ? '1' : '0'); } catch { /* storage unavailable */ }
+    set({ retryWeak });
+  },
+  detectedLanguage: null,
+  glossarySets: (() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('capshorts.glossarySets') || '[]');
+      return Array.isArray(raw) ? raw.filter((x: any) => x && typeof x.name === 'string' && typeof x.terms === 'string') : [];
+    } catch { return []; }
+  })(),
+  saveGlossarySet: (name) => {
+    const clean = name.trim();
+    if (!clean) return;
+    const sets = get().glossarySets.filter((x) => x.name !== clean);
+    sets.push({ name: clean, terms: get().glossary });
+    try { localStorage.setItem('capshorts.glossarySets', JSON.stringify(sets)); } catch { /* storage unavailable */ }
+    set({ glossarySets: sets });
+  },
+  deleteGlossarySet: (name) => {
+    const sets = get().glossarySets.filter((x) => x.name !== name);
+    try { localStorage.setItem('capshorts.glossarySets', JSON.stringify(sets)); } catch { /* storage unavailable */ }
+    set({ glossarySets: sets });
+  },
+  markWordVerified: (index) => set((state) => {
+    const updated = [...state.transcript];
+    if (updated[index]) updated[index] = { ...updated[index], confidence: null };
+    return { transcript: updated };
+  }),
+  selectNextUncertainWord: () => {
+    const { transcript, selectedTimelineItemId, selectedTimelineItemType, currentTime } = get();
+    const isLow = (w: WordToken) => typeof w.confidence === 'number' && w.confidence < 0.5;
+    if (!transcript.some(isLow)) return false;
+    let from = -1;
+    if (selectedTimelineItemType === 'subtitle' && selectedTimelineItemId) {
+      from = transcript.findIndex((w) => w.id === selectedTimelineItemId);
+    }
+    if (from < 0) from = transcript.findIndex((w) => w.start >= currentTime) - 1;
+    for (let step = 1; step <= transcript.length; step++) {
+      const i = (from + step + transcript.length) % transcript.length;
+      if (isLow(transcript[i])) {
+        set({
+          selectedTimelineItemId: transcript[i].id,
+          selectedTimelineItemType: 'subtitle',
+          activeInspectorTab: 'text',
+          currentTime: transcript[i].start,
+        });
+        return true;
+      }
+    }
+    return false;
+  },
   glossary: (() => {
     try { return localStorage.getItem('capshorts.glossary') || ''; } catch { return ''; }
   })(),
@@ -347,7 +419,11 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
   updateWord: (index, changes) => set((state) => {
     const updated = [...state.transcript];
     if (updated[index]) {
-      updated[index] = { ...updated[index], ...changes };
+      updated[index] = {
+        ...updated[index],
+        ...changes,
+        ...(changes.word !== undefined && changes.confidence === undefined ? { confidence: null } : {})
+      };
     }
     return { transcript: updated };
   }),
@@ -462,7 +538,7 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
   setTranscribingStep: (transcribingStep) => set({ transcribingStep }),
 
   startTranscription: async (file: File, model?: string, language?: string) => {
-    const { groqApiKey, rangeMode, selectedModel, selectedLanguage, glossary } = get();
+    const { groqApiKey, rangeMode, selectedModel, selectedLanguage, glossary, enhanceAudio, retryWeak } = get();
     const effectiveModel = model || selectedModel || 'whisper-large-v3-turbo';
     const effectiveLanguage = language || selectedLanguage || 'auto';
     const isTurbo = Boolean(groqApiKey && groqApiKey.trim().length > 10);
@@ -470,6 +546,7 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
     set({
       isTranscribing: true,
       transcribeError: null,
+      detectedLanguage: null,
       transcribeProgress: 6,
       transcribingStep: isTurbo
         ? '⚡ Turbo Mode: Uploading and extracting audio...'
@@ -482,6 +559,8 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
       formData.append('model', effectiveModel);
       formData.append('language', effectiveLanguage);
       formData.append('range_mode', rangeMode);
+      formData.append('enhance_audio', enhanceAudio ? '1' : '0');
+      formData.append('retry_weak', retryWeak ? '1' : '0');
       if (glossary.trim()) {
         formData.append('glossary', glossary);
       }
@@ -569,9 +648,13 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
                     end: w.end,
                     word: w.word,
                     keyword: Boolean(w.keyword),
+                    confidence: typeof w.confidence === 'number' ? w.confidence : null,
                   }));
                   set({
                     transcript: formatted,
+                    detectedLanguage: progData.language
+                      ? { code: String(progData.language), probability: typeof progData.language_probability === 'number' ? progData.language_probability : null }
+                      : null,
                     clips: progData.clips || [],
                     serverVideoPath: progData.video_path || get().serverVideoPath,
                     isTranscribing: false,

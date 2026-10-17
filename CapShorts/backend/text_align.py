@@ -96,9 +96,12 @@ def align_words(old_words: List[Dict[str, Any]], new_text: str, match_threshold:
     for j, tok in enumerate(new_tokens):
         if pair[j] is not None:
             ow = old_words[pair[j]]
-            out.append({"start": ow["start"], "end": ow["end"], "word": tok, "keyword": ow.get("keyword", False)})
+            # An unchanged word keeps its recognition confidence; a rewritten one counts as user-verified
+            same = _norm(ow["word"]) == _norm(tok)
+            out.append({"start": ow["start"], "end": ow["end"], "word": tok, "keyword": ow.get("keyword", False),
+                        "confidence": ow.get("confidence") if same else None})
         else:
-            out.append({"start": None, "end": None, "word": tok, "keyword": False})
+            out.append({"start": None, "end": None, "word": tok, "keyword": False, "confidence": None})
 
     # Fill inserted runs by splitting the gap between the nearest timed neighbours
     j = 0
@@ -158,6 +161,7 @@ def apply_glossary(words: List[Dict[str, Any]], glossary: List[str], threshold: 
         tail = re.search(r"[" + re.escape(_PUNCT) + r"]*$", last["word"]).group(0)
         out.append({
             **first,
+            "confidence": None,
             "word": f"{lead}{term.replace(' ', '') if run > 1 else term}{tail}",
             "end": last["end"],
             "keyword": any(w.get("keyword", False) for w in words[i:i + run]),

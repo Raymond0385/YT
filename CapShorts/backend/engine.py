@@ -43,6 +43,7 @@ from clip_generator import detect_viral_clips
 from groq_transcribe import transcribe_with_groq_pool
 from transliterate import transliterate_transcript, transliterate_word
 import youtube_download as yt
+import asr_quality as aq
 from text_align import align_words, apply_glossary, collapse_repeats, sanitize_words, fix_durations
 from telemetry import telemetry
 
@@ -246,6 +247,7 @@ class WordItem(BaseModel):
     end: float = Field(ge=0.0)
     word: str = Field(min_length=0)
     keyword: Optional[bool] = False
+    confidence: Optional[float] = None
 
     @model_validator(mode="after")
     def validate_word_timestamps(self):
@@ -402,6 +404,12 @@ def get_whisper_model(model_size: str = "base"):
             print(f"[engine] Warning: Faster-Whisper could not be loaded: {e}")
             return None
 
+AUDIO_ENHANCE_FILTER = "highpass=f=80,afftdn=nf=-25,loudnorm=I=-16:TP=-1.5:LRA=11"
+
+def audio_filter_args(enhance: bool) -> List[str]:
+    """FFmpeg args that clean up speech before recognition (rumble, noise, uneven loudness)."""
+    return ["-af", AUDIO_ENHANCE_FILTER] if enhance else []
+
 def glossary_prompt(glossary: Optional[List[str]]) -> Optional[str]:
     """Builds a Whisper prompt biasing recognition toward user-supplied names/terms."""
     terms = [t.strip() for t in (glossary or []) if t and t.strip()]
@@ -523,7 +531,9 @@ def run_transcribe_job(
     language: Optional[str],
     groq_api_key: Optional[str] = None,
     range_mode: str = "full",
-    glossary: Optional[List[str]] = None
+    glossary: Optional[List[str]] = None,
+    enhance_audio: bool = True,
+    retry_weak: bool = False
 ):
     """
     Background worker executing either ultra-fast Groq Cloud AI (~2 seconds)
@@ -557,7 +567,9 @@ def run_transcribe_job(
                 cmd = [
                     ffmpeg_bin, "-y", "-i", target_video
                 ] + trim_args + [
-                    "-vn", "-ar", "16000", "-ac", "1", "-b:a", "32k",
+                    "-vn"
+                ] + audio_filter_args(enhance_audio) + [
+                    "-ar", "16000", "-ac", "1", "-b:a", "32k",
                     audio_mp3
                 ]
                 subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120, **SUBPROCESS_EXTRA_KWARGS)
@@ -568,7 +580,7 @@ def run_transcribe_job(
                     "status": "processing"
                 })
 
-                words_result, dur = transcribe_with_groq_pool(audio_mp3, key_pool, language, prompt=glossary_prompt(glossary))
+                words_result, dur, detected_lang = transcribe_with_groq_pool(audio_mp3, key_pool, language, prompt=glossary_prompt(glossary))
                 words_result = tag_keywords(clean_transcript(words_result, glossary))
 
                 update_task_state(TRANSCRIBE_JOBS, task_id, {
@@ -587,6 +599,7 @@ def run_transcribe_job(
                     "words": words_result,
                     "clips": clips_result,
                     "duration": video_dur,
+                    "language": detected_lang,
                     "video_path": target_video
                 })
                 return
@@ -624,7 +637,7 @@ def run_transcribe_job(
             if check_ffmpeg():
                 cmd = [
                     ffmpeg_bin, "-y", "-i", target_video
-                ] + trim_args + [
+                ] + trim_args + audio_filter_args(enhance_audio) + [
                     "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
                     audio_wav
                 ]
@@ -641,8 +654,16 @@ def run_transcribe_job(
                 "status": "processing"
             })
 
+            update_task_state(TRANSCRIBE_JOBS, task_id, {
+                "progress": 26,
+                "step": "Loading speech model (the first run downloads it, large models are ~1.5 GB)...",
+                "status": "processing"
+            })
             whisper_engine = get_whisper_model(model)
             words_result = []
+            detected_lang = None
+            detected_prob = None
+            weak_ranges: List[Tuple[float, float]] = []
 
             if whisper_engine and os.path.exists(audio_wav):
                 is_roman = (language in ["urdu", "ur", "roman", "roman_urdu"])
@@ -660,8 +681,12 @@ def run_transcribe_job(
                     language=whisper_lang,
                     vad_filter=True,
                     condition_on_previous_text=False,
-                    initial_prompt=glossary_prompt(glossary)
+                    initial_prompt=glossary_prompt(glossary),
+                    language_detection_segments=3,
+                    language_detection_threshold=0.5
                 )
+                detected_lang = getattr(info, "language", None)
+                detected_prob = getattr(info, "language_probability", None)
 
                 actual_dur = audio_duration if audio_duration > 0 else 60.0
 
@@ -675,21 +700,74 @@ def run_transcribe_job(
                             "status": "processing"
                         })
 
+                    seg_words = []
                     if segment.words:
                         for w in segment.words:
-                            words_result.append({
+                            seg_words.append({
                                 "start": round(w.start, 2),
                                 "end": round(w.end, 2),
                                 "word": w.word.strip(),
-                                "keyword": False
+                                "keyword": False,
+                                "confidence": round(float(w.probability), 2) if getattr(w, "probability", None) is not None else None
                             })
                     else:
-                        words_result.append({
+                        seg_words.append({
                             "start": round(segment.start, 2),
                             "end": round(segment.end, 2),
                             "word": segment.text.strip(),
-                            "keyword": False
+                            "keyword": False,
+                            "confidence": aq.logprob_to_confidence(getattr(segment, "avg_logprob", None))
                         })
+                    words_result.extend(seg_words)
+                    if aq.is_weak_segment(getattr(segment, "avg_logprob", None),
+                                          getattr(segment, "compression_ratio", None),
+                                          getattr(segment, "no_speech_prob", None), seg_words):
+                        weak_ranges.append((float(segment.start), float(segment.end)))
+
+                # Second pass: re-run only the doubtful parts with a larger model
+                if retry_weak and weak_ranges and words_result and LOCAL_MODEL_ALIASES.get(model, model) not in ("large-v3", "large-v3-turbo"):
+                    ranges = aq.limit_retry_ranges(aq.merge_ranges(weak_ranges, total=actual_dur), actual_dur)
+                    big_model = get_whisper_model("turbo") if ranges else None
+                    if big_model:
+                        retry_lang = whisper_lang or detected_lang
+                        for idx, (r_start, r_end) in enumerate(ranges):
+                            update_task_state(TRANSCRIBE_JOBS, task_id, {
+                                "progress": 93,
+                                "step": f"Re-checking uncertain parts with the large model ({idx + 1}/{len(ranges)})...",
+                                "status": "processing"
+                            })
+                            chunk_path = os.path.join(TEMP_DIR, f"retry_{task_id}_{idx}.wav")
+                            try:
+                                subprocess.run(
+                                    [ffmpeg_bin, "-y", "-ss", str(r_start), "-t", str(max(0.5, r_end - r_start)), "-i", audio_wav,
+                                     "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", chunk_path],
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120, **SUBPROCESS_EXTRA_KWARGS)
+                                if not os.path.exists(chunk_path):
+                                    continue
+                                re_segments, _ = big_model.transcribe(
+                                    chunk_path, word_timestamps=True, beam_size=5, language=retry_lang,
+                                    vad_filter=True, condition_on_previous_text=False,
+                                    initial_prompt=glossary_prompt(glossary))
+                                new_words = []
+                                for rs in re_segments:
+                                    for w in (rs.words or []):
+                                        new_words.append({
+                                            "start": round(w.start + r_start, 2),
+                                            "end": round(w.end + r_start, 2),
+                                            "word": w.word.strip(),
+                                            "keyword": False,
+                                            "confidence": round(float(w.probability), 2)
+                                        })
+                                if new_words:
+                                    words_result = aq.replace_range(words_result, r_start, r_end, new_words)
+                            except Exception as retry_err:
+                                print(f"[engine] weak-segment retry skipped: {retry_err}")
+                            finally:
+                                if os.path.exists(chunk_path):
+                                    try:
+                                        os.remove(chunk_path)
+                                    except Exception:
+                                        pass
 
             if not words_result:
                 raise RuntimeError("No speech could be extracted from this audio file. Please check audio volume and quality.")
@@ -716,6 +794,8 @@ def run_transcribe_job(
                 "words": words_result,
                 "clips": clips_result,
                 "duration": video_duration,
+                "language": detected_lang,
+                "language_probability": round(float(detected_prob), 2) if detected_prob is not None else None,
                 "video_path": os.path.basename(target_video)
             })
             try:
@@ -785,7 +865,9 @@ def start_transcription(
     language: Optional[str] = Form(None),
     groq_api_key: Optional[str] = Form(None),
     range_mode: str = Form("full"),
-    glossary: Optional[str] = Form(None)
+    glossary: Optional[str] = Form(None),
+    enhance_audio: str = Form("1"),
+    retry_weak: str = Form("0")
 ):
     """
     Begins transcribing video speech and extracting viral shorts via threadpool background worker.
@@ -818,7 +900,9 @@ def start_transcription(
         language,
         groq_api_key,
         range_mode,
-        [t.strip() for t in re.split(r"[,\n]", glossary) if t.strip()] if glossary else None
+        [t.strip() for t in re.split(r"[,\n]", glossary) if t.strip()] if glossary else None,
+        enhance_audio.strip().lower() in ("1", "true", "yes", "on"),
+        retry_weak.strip().lower() in ("1", "true", "yes", "on")
     )
     return {"status": "started", "task_id": task_id, "video_path": os.path.basename(target_video)}
 

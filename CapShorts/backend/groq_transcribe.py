@@ -2,13 +2,14 @@ import os
 import requests
 from typing import List, Dict, Any, Tuple, Optional
 from transliterate import transliterate_transcript
+from asr_quality import logprob_to_confidence
 
 def transcribe_with_groq_pool(
     audio_file_path: str,
     api_keys: List[str],
     language: Optional[str] = None,
     prompt: Optional[str] = None
-) -> Tuple[List[Dict[str, Any]], float]:
+) -> Tuple[List[Dict[str, Any]], float, Optional[str]]:
     """
     Ultra-fast cloud transcription via Groq Whisper Large-v3 with Key Pool Auto-Rotation.
     Supports:
@@ -74,6 +75,17 @@ def transcribe_with_groq_pool(
                 res_data = res.json()
                 raw_words: List[Dict[str, Any]] = []
                 duration = float(res_data.get("duration", 0.0))
+                detected_language = res_data.get("language")
+                seg_conf = [
+                    (float(sg.get("start", 0.0)), float(sg.get("end", 0.0)), logprob_to_confidence(sg.get("avg_logprob")))
+                    for sg in (res_data.get("segments") or [])
+                ]
+
+                def conf_at(t: float) -> Optional[float]:
+                    for s0, e0, c in seg_conf:
+                        if s0 - 0.05 <= t <= e0 + 0.05:
+                            return c
+                    return None
 
                 if "words" in res_data and res_data["words"]:
                     for w in res_data["words"]:
@@ -83,7 +95,8 @@ def transcribe_with_groq_pool(
                                 "start": round(float(w.get("start", 0.0)), 2),
                                 "end": round(float(w.get("end", 0.0)), 2),
                                 "word": raw_w,
-                                "keyword": False
+                                "keyword": False,
+                                "confidence": conf_at(float(w.get("start", 0.0)))
                             })
                 elif "segments" in res_data and res_data["segments"]:
                     for seg in res_data["segments"]:
@@ -121,7 +134,8 @@ def transcribe_with_groq_pool(
                         "start": round(start_t, 2),
                         "end": round(end_t, 2),
                         "word": w["word"],
-                        "keyword": False
+                        "keyword": False,
+                        "confidence": w.get("confidence")
                     })
 
                 # If Roman Urdu requested, transliterate Devanagari/Hindi words
@@ -129,7 +143,7 @@ def transcribe_with_groq_pool(
                     cleaned_words = transliterate_transcript(cleaned_words)
 
                 print(f"[groq] Success with key #{idx+1}! Extracted {len(cleaned_words)} words in 2-3s (Language: {language or 'auto'}).")
-                return cleaned_words, duration
+                return cleaned_words, duration, detected_language
 
         except Exception as e:
             print(f"[groq] Exception on key #{idx+1}: {e}")

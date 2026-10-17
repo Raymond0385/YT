@@ -1352,6 +1352,8 @@ export const CapShortsStudio: React.FC = () => {
                     <option value="whisper-large-v3-turbo">⚡ Ultra Fast Cloud Engine (~2-3s) [Recommended]</option>
                     <option value="base">💻 Standard Offline Engine (On-Device)</option>
                     <option value="small">💻 High Accuracy Offline Engine (On-Device)</option>
+                    <option value="turbo">🎯 Turbo - accurate offline</option>
+                    <option value="large-v3">🏆 Large-v3 - best offline accuracy</option>
                   </select>
 
                   <button

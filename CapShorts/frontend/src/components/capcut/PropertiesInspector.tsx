@@ -42,6 +42,8 @@ export const PropertiesInspector: React.FC = () => {
     toggleKeyword,
     insertWordAtTime,
     currentTime,
+    markWordVerified,
+    selectNextUncertainWord,
     activeTemplateId,
     customStyleOverrides,
     updateCustomStyle,
@@ -71,6 +73,8 @@ export const PropertiesInspector: React.FC = () => {
       toggleKeyword: state.toggleKeyword,
       insertWordAtTime: state.insertWordAtTime,
       currentTime: state.currentTime,
+      markWordVerified: state.markWordVerified,
+      selectNextUncertainWord: state.selectNextUncertainWord,
       activeTemplateId: state.activeTemplateId,
       customStyleOverrides: state.customStyleOverrides,
       updateCustomStyle: state.updateCustomStyle,
@@ -105,6 +109,11 @@ export const PropertiesInspector: React.FC = () => {
   }, [transcript, selectedTimelineItemId, selectedTimelineItemType]);
 
   const selectedWord = selectedWordIndex !== -1 ? transcript[selectedWordIndex] : null;
+
+  const uncertainCount = useMemo(
+    () => transcript.filter((w) => typeof w.confidence === 'number' && w.confidence < 0.5).length,
+    [transcript]
+  );
 
   // Focus the text field right after a word is added so it can be typed immediately
   const wordInputRef = useRef<HTMLInputElement | null>(null);
@@ -191,6 +200,16 @@ export const PropertiesInspector: React.FC = () => {
               <Plus className="w-3.5 h-3.5" />
               <span>Add word at playhead</span>
             </button>
+            {uncertainCount > 0 && (
+              <button
+                onClick={() => selectNextUncertainWord()}
+                className="w-full py-2 px-3 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-200 text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors"
+                data-testid="next-uncertain"
+                title="Jump to the next word the recognizer was not sure about"
+              >
+                <span>Review uncertain words ({uncertainCount})</span>
+              </button>
+            )}
             {/* Selected Word Context Bar */}
             {selectedWord ? (
               <div className="bg-gradient-to-br from-indigo-500/10 via-white/[0.02] to-transparent border border-indigo-500/30 rounded-2xl p-3.5 space-y-3 shadow-lg shadow-indigo-500/5">
@@ -221,6 +240,13 @@ export const PropertiesInspector: React.FC = () => {
                     className="w-full bg-black/50 border border-indigo-400/40 focus:border-indigo-400 rounded-xl px-3 py-2 text-xs text-white font-bold focus:outline-none focus:ring-1 focus:ring-indigo-400/50 transition-all font-sans"
                   />
                 </div>
+
+                {typeof selectedWord.confidence === 'number' && selectedWord.confidence < 0.5 && (
+                  <div className="flex items-center justify-between text-[10px] text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-lg px-2 py-1" data-testid="low-confidence-note">
+                    <span>Recognizer confidence {Math.round(selectedWord.confidence * 100)}% - check this word</span>
+                    <button onClick={() => markWordVerified(selectedWordIndex)} className="underline hover:text-white">Looks right</button>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between text-[10px] text-zinc-400 pt-1.5 border-t border-white/[0.06]">
                   <span className="font-mono text-zinc-400 bg-white/[0.04] px-2 py-0.5 rounded border border-white/[0.06]">
