@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import {
   Type,
   Video,
@@ -11,7 +11,8 @@ import {
   Edit2,
   ZoomIn,
   Move,
-  Maximize2
+  Maximize2,
+  Plus
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { useVideoStore } from '../../store/useVideoStore';
@@ -39,6 +40,8 @@ export const PropertiesInspector: React.FC = () => {
     updateWord,
     deleteWord,
     toggleKeyword,
+    insertWordAtTime,
+    currentTime,
     activeTemplateId,
     customStyleOverrides,
     updateCustomStyle,
@@ -66,6 +69,8 @@ export const PropertiesInspector: React.FC = () => {
       updateWord: state.updateWord,
       deleteWord: state.deleteWord,
       toggleKeyword: state.toggleKeyword,
+      insertWordAtTime: state.insertWordAtTime,
+      currentTime: state.currentTime,
       activeTemplateId: state.activeTemplateId,
       customStyleOverrides: state.customStyleOverrides,
       updateCustomStyle: state.updateCustomStyle,
@@ -100,6 +105,17 @@ export const PropertiesInspector: React.FC = () => {
   }, [transcript, selectedTimelineItemId, selectedTimelineItemType]);
 
   const selectedWord = selectedWordIndex !== -1 ? transcript[selectedWordIndex] : null;
+
+  // Focus the text field right after a word is added so it can be typed immediately
+  const wordInputRef = useRef<HTMLInputElement | null>(null);
+  const [focusWordId, setFocusWordId] = useState<string | null>(null);
+  useEffect(() => {
+    if (focusWordId && selectedWord && selectedWord.id === focusWordId && wordInputRef.current) {
+      wordInputRef.current.focus();
+      wordInputRef.current.select();
+      setFocusWordId(null);
+    }
+  }, [focusWordId, selectedWord]);
 
   // Selected Clip (if viral clip is active)
   const activeClip = useMemo(() => {
@@ -166,6 +182,15 @@ export const PropertiesInspector: React.FC = () => {
         {/* ======================= TEXT INSPECTOR ======================= */}
         {activeInspectorTab === 'text' && (
           <div className="space-y-4 animate-fade">
+            <button
+              onClick={() => setFocusWordId(insertWordAtTime(currentTime))}
+              className="w-full py-2 px-3 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/40 text-indigo-200 text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors"
+              data-testid="add-word"
+              title="Insert a new caption word at the playhead"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add word at playhead</span>
+            </button>
             {/* Selected Word Context Bar */}
             {selectedWord ? (
               <div className="bg-gradient-to-br from-indigo-500/10 via-white/[0.02] to-transparent border border-indigo-500/30 rounded-2xl p-3.5 space-y-3 shadow-lg shadow-indigo-500/5">
@@ -190,6 +215,7 @@ export const PropertiesInspector: React.FC = () => {
                 <div className="space-y-1">
                   <input
                     type="text"
+                    ref={wordInputRef}
                     value={selectedWord.word}
                     onChange={(e) => updateWord(selectedWordIndex, { word: e.target.value })}
                     className="w-full bg-black/50 border border-indigo-400/40 focus:border-indigo-400 rounded-xl px-3 py-2 text-xs text-white font-bold focus:outline-none focus:ring-1 focus:ring-indigo-400/50 transition-all font-sans"

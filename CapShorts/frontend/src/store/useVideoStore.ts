@@ -61,6 +61,7 @@ interface VideoStoreState {
   setTranscript: (words: WordToken[]) => void;
   updateWord: (index: number, changes: Partial<WordToken>) => void;
   addWord: (word: WordToken, afterIndex?: number) => void;
+  insertWordAtTime: (time: number, text?: string) => string;
   deleteWord: (index: number) => void;
   toggleKeyword: (index: number) => void;
 
@@ -360,6 +361,46 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
     }
     return { transcript: updated };
   }),
+
+  insertWordAtTime: (time, text = 'New word') => {
+    const { transcript, duration } = get();
+    const DEFAULT_LEN = 0.4;
+    const MIN_LEN = 0.1;
+    const t = Math.max(0, time);
+
+    // Insert after the last word that starts at or before the playhead
+    let afterIndex = -1;
+    for (let i = 0; i < transcript.length; i++) {
+      if (transcript[i].start <= t) afterIndex = i;
+      else break;
+    }
+    const prev = afterIndex >= 0 ? transcript[afterIndex] : null;
+    const next = transcript[afterIndex + 1] || null;
+
+    // Don't start inside the previous word
+    const start = Math.max(t, prev ? prev.end : 0);
+    let end = start + DEFAULT_LEN;
+    if (next) end = Math.min(end, next.start);
+    if (duration > 0) end = Math.min(end, Math.max(duration, start + MIN_LEN));
+    if (end - start < MIN_LEN) end = start + MIN_LEN;
+
+    const word: WordToken = {
+      id: `w-new-${Date.now()}-${Math.floor(Math.random() * 1e4)}`,
+      start: Number(start.toFixed(2)),
+      end: Number(end.toFixed(2)),
+      word: text,
+      keyword: false,
+    };
+    const updated = [...transcript];
+    updated.splice(afterIndex + 1, 0, word);
+    set({
+      transcript: updated,
+      selectedTimelineItemId: word.id,
+      selectedTimelineItemType: 'subtitle',
+      activeInspectorTab: 'text',
+    });
+    return word.id;
+  },
 
   deleteWord: (index) => set((state) => {
     const updated = state.transcript.filter((_, i) => i !== index);
