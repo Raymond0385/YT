@@ -134,3 +134,11 @@ scratch/
 
 backend/settings.json
 CapShorts/backend/settings.json
+
+CapShorts/backend/*.spec
+CapShorts/dbg-*/
+CapShorts/*.log
+CapShorts/backend/dist/
+CapShorts/backend/build/
+CapShorts/src-tauri/gen/
+CapShorts/src-tauri/target/

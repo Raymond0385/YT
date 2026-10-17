@@ -738,7 +738,7 @@ export const SettingsModal: React.FC = () => {
                       <span>Zero manual re-downloads required — updates download and install inside the app.</span>
                     </span>
                     <a
-                      href={updateInfo?.release_url || 'https://github.com/thealiraza2/CapShorts/releases/latest'}
+                      href={updateInfo?.release_url || 'https://github.com/Raymond0385/YT/releases/latest'}
                       target="_blank"
                       rel="noreferrer"
                       className="text-zinc-400 hover:text-white flex items-center space-x-1 hover:underline font-medium"

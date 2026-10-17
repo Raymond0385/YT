@@ -582,6 +582,7 @@ export const MediaLibraryPanel: React.FC = () => {
                   <option value="ar">Arabic</option>
                   <option value="fr">French</option>
                   <option value="de">German</option>
+                  <option value="ru">Russian (Русский)</option>
                   <option value="ur_script">Urdu Script (اردو خط)</option>
                 </select>
               </div>

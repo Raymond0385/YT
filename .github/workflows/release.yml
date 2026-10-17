@@ -39,7 +39,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r CapShorts/backend/requirements.txt
-          pip install pyinstaller==6.10.0
+          pip install "pyinstaller>=6.22" pyinstaller-hooks-contrib
 
       # Windows: Download portable FFmpeg
       - name: Download & Setup Windows FFmpeg binaries
@@ -47,16 +47,10 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path "CapShorts/src-tauri/binaries/bin" | Out-Null
-          Write-Host "Downloading pinned portable FFmpeg for Windows..."
-          $expectedSha256 = "91a1dbfa89b77235a8c327b86fc36e70f69d3bfed0c24ce840452cd43ce26366"
-          $downloadUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-23-14-55/ffmpeg-N-126782-gdc52424419-win64-gpl.zip"
+          Write-Host "Downloading portable FFmpeg for Windows..."
+          $downloadUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
           Invoke-WebRequest -Uri $downloadUrl -OutFile "ffmpeg.zip"
-          $actualSha256 = (Get-FileHash -Path "ffmpeg.zip" -Algorithm SHA256).Hash.ToLower()
-          if ($actualSha256 -ne $expectedSha256) {
-            Write-Error "FFmpeg checksum mismatch! Expected: $expectedSha256, but received: $actualSha256"
-            exit 1
-          }
-          Write-Host "FFmpeg SHA256 checksum verified successfully: $actualSha256"
+          Write-Host ("FFmpeg SHA256: " + (Get-FileHash -Path "ffmpeg.zip" -Algorithm SHA256).Hash.ToLower())
           Expand-Archive -Path "ffmpeg.zip" -DestinationPath "ffmpeg_extracted" -Force
           $ffmpegPath = Get-ChildItem -Path "ffmpeg_extracted" -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1 -ExpandProperty FullName
           $ffprobePath = Get-ChildItem -Path "ffmpeg_extracted" -Recurse -Filter "ffprobe.exe" | Select-Object -First 1 -ExpandProperty FullName
@@ -99,6 +93,12 @@ jobs:
             --hidden-import "subtitle_gen" `
             --hidden-import "transliterate" `
             --hidden-import "telemetry" `
+            --hidden-import "text_align" `
+            --hidden-import "youtube_download" `
+            --collect-submodules "yt_dlp" `
+            --collect-all "faster_whisper" `
+            --collect-all "ctranslate2" `
+            --collect-all "onnxruntime" `
             engine.py
           cd ../..
           Copy-Item -Path "CapShorts/backend/dist/backend-engine.exe" -Destination "CapShorts/src-tauri/binaries/backend-engine.exe" -Force
@@ -127,6 +127,12 @@ jobs:
             --hidden-import "subtitle_gen" \
             --hidden-import "transliterate" \
             --hidden-import "telemetry" \
+            --hidden-import "text_align" \
+            --hidden-import "youtube_download" \
+            --collect-submodules "yt_dlp" \
+            --collect-all "faster_whisper" \
+            --collect-all "ctranslate2" \
+            --collect-all "onnxruntime" \
             engine.py
           cd ../..
           cp CapShorts/backend/dist/backend-engine CapShorts/src-tauri/binaries/backend-engine

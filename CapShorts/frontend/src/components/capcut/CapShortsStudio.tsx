@@ -1340,6 +1340,7 @@ export const CapShortsStudio: React.FC = () => {
                     <option value="ar">Arabic</option>
                     <option value="fr">French</option>
                     <option value="de">German</option>
+                    <option value="ru">Russian (Русский)</option>
                   </select>
 
                   <div className="cs-field-label" style={{ marginTop: 8 }}>Speech Engine</div>

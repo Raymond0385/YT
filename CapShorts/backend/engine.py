@@ -46,6 +46,16 @@ import youtube_download as yt
 from text_align import align_words, apply_glossary, collapse_repeats, sanitize_words, fix_durations
 from telemetry import telemetry
 
+# Import the speech stack once, up front and on the main thread. In a packaged (PyInstaller) build,
+# importing numpy/ctranslate2 from several worker threads at once fails with
+# "cannot load module more than once per process".
+try:
+    import numpy  # noqa: F401
+    import ctranslate2  # noqa: F401
+    import faster_whisper  # noqa: F401
+except Exception as _speech_import_error:
+    print(f"[engine] speech stack unavailable: {_speech_import_error}")
+
 app = FastAPI(title="CapShorts AI Engine", version="1.2.0")
 
 def get_ffmpeg_bin() -> str:
@@ -127,9 +137,17 @@ if not os.path.exists(BIN_DIR) and os.path.exists(os.path.join(MEIPASS_DIR, "bin
 if os.path.exists(BIN_DIR):
     os.environ["PATH"] = BIN_DIR + os.pathsep + os.environ.get("PATH", "")
 
-TEMP_DIR = os.path.join(BASE_DIR, "temp")
-OUTPUT_DIR = os.path.join(BASE_DIR, "outputs")
-ENV_FILE = os.path.join(BASE_DIR, ".env")
+# Writable data location: the installed app lives in a read-only folder (e.g. Program Files),
+# so a packaged build keeps temp files, exports, keys and settings in the user profile.
+if getattr(sys, 'frozen', False):
+    DATA_DIR = os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "CapShorts")
+else:
+    DATA_DIR = BASE_DIR
+os.makedirs(DATA_DIR, exist_ok=True)
+
+TEMP_DIR = os.path.join(DATA_DIR, "temp")
+OUTPUT_DIR = os.path.join(DATA_DIR, "outputs")
+ENV_FILE = os.path.join(DATA_DIR, ".env")
 os.makedirs(TEMP_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -462,10 +480,13 @@ def health_check():
         print(f"[health] ctranslate2 diagnostic notice: {e}")
 
     has_whisper = False
+    whisper_error = None
     try:
         import faster_whisper
         has_whisper = True
     except Exception as e:
+        import traceback
+        whisper_error = f"{type(e).__name__}: {e} | " + " > ".join(l.strip() for l in traceback.format_exc().splitlines()[-14:] if l.strip().startswith("File"))[-900:]
         print(f"[health] faster_whisper diagnostic notice: {e}")
 
     has_ffmpeg = check_ffmpeg()
@@ -477,6 +498,7 @@ def health_check():
         "device": "CUDA (NVIDIA GPU)" if has_cuda else "CPU (CTranslate2 Multi-Threaded)",
         "cuda_available": has_cuda,
         "whisper_available": has_whisper,
+        "whisper_error": whisper_error,
         "ffmpeg_available": has_ffmpeg,
         "hardware_encoder": hw_name,
         "master_groq_active": len(master_keys) > 0,
@@ -1093,7 +1115,7 @@ class YoutubeDownloadPayload(BaseModel):
 class YoutubeSettingsPayload(BaseModel):
     download_dir: Optional[str] = None
 
-APP_SETTINGS_FILE = os.path.join(BASE_DIR, "settings.json")
+APP_SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
 LOCAL_ORIGIN_HOSTS = {"localhost", "127.0.0.1", "[::1]", "tauri.localhost"}
 
 def verify_local_origin(request: Request):
@@ -1511,7 +1533,9 @@ def download_subtitles_file(filename: str):
     media_type = "application/x-subrip" if filename.endswith(".srt") else "text/vtt" if filename.endswith(".vtt") else "text/plain"
     return FileResponse(path, media_type=media_type, filename=os.path.basename(path))
 
-CURRENT_ENGINE_VERSION = "1.1.8"
+CURRENT_ENGINE_VERSION = "1.2.0"
+# GitHub repo the in-app updater checks for releases (owner/name)
+UPDATE_REPO = os.environ.get("CAPSHORTS_UPDATE_REPO", "Raymond0385/YT")
 
 UPDATE_CACHE = {
     "last_checked": 0.0,
@@ -1547,7 +1571,7 @@ def fetch_latest_github_release() -> Optional[Dict[str, Any]]:
     if UPDATE_CACHE["data"] and (now - UPDATE_CACHE["last_checked"] < UPDATE_CACHE_TTL):
         return UPDATE_CACHE["data"]
     
-    url = "https://api.github.com/repos/thealiraza2/CapShorts/releases/latest"
+    url = f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest"
     req = urllib.request.Request(
         url,
         headers={"User-Agent": f"CapShorts-Desktop-App/{CURRENT_ENGINE_VERSION}"}
@@ -1654,7 +1678,7 @@ def get_update_status():
     update_available = False
     release_title = "CapShorts Release"
     release_notes = ""
-    release_url = "https://github.com/thealiraza2/CapShorts/releases/latest"
+    release_url = f"https://github.com/{UPDATE_REPO}/releases/latest"
     
     selected_asset_name = ""
     selected_download_url = ""
