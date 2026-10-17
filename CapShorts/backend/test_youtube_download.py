@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from youtube_download import validate_youtube_url, build_format, resolve_download_dir, default_download_dir
+from youtube_download import validate_youtube_url, build_format, resolve_download_dir, default_download_dir, find_js_runtimes, explain_error
 
 
 @pytest.mark.parametrize("url", [
@@ -50,3 +50,23 @@ def test_download_dir_rejects_file(tmp_path):
     f.write_text("x")
     with pytest.raises(ValueError):
         resolve_download_dir(str(f))
+
+
+def test_find_js_runtimes_prefers_bundled_quickjs(tmp_path):
+    exe = tmp_path / ("qjs.exe" if os.name == "nt" else "qjs")
+    exe.write_text("x")
+    if os.name != "nt":
+        exe.chmod(0o755)
+    found = find_js_runtimes([str(tmp_path)])
+    assert found["quickjs"]["path"].lower().startswith(str(tmp_path).lower())
+
+
+def test_find_js_runtimes_handles_missing_dirs(tmp_path):
+    assert isinstance(find_js_runtimes([str(tmp_path / "nope"), ""]), dict)
+    assert isinstance(find_js_runtimes(None), dict)
+
+
+def test_explain_error_messages():
+    assert "private" in explain_error(Exception("Video is private")).lower()
+    assert "internet" in explain_error(Exception("<urlopen error getaddrinfo failed>")).lower()
+    assert explain_error(Exception("something odd")).startswith("Could not read")

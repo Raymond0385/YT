@@ -35,6 +35,17 @@ jobs:
           mkdir -p CapShorts/src-tauri/binaries/fonts
           cp CapShorts/frontend/public/fonts/*.ttf CapShorts/src-tauri/binaries/fonts/
 
+      - name: Download QuickJS (JavaScript engine used to read YouTube)
+        shell: bash
+        run: |
+          mkdir -p CapShorts/src-tauri/binaries/bin
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            curl -fsSL -o CapShorts/src-tauri/binaries/bin/qjs.exe "https://github.com/quickjs-ng/quickjs/releases/latest/download/qjs-windows-x86_64.exe"
+          else
+            curl -fsSL -o CapShorts/src-tauri/binaries/bin/qjs "https://github.com/quickjs-ng/quickjs/releases/latest/download/qjs-darwin" || echo "QuickJS for macOS not downloaded; YouTube import will use a system Node/Deno if present"
+            chmod +x CapShorts/src-tauri/binaries/bin/qjs || true
+          fi
+
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
@@ -104,6 +115,7 @@ jobs:
             --hidden-import "file_utils" `
             --hidden-import "youtube_download" `
             --collect-submodules "yt_dlp" `
+            --collect-all "yt_dlp_ejs" `
             --collect-all "faster_whisper" `
             --collect-all "ctranslate2" `
             --collect-all "onnxruntime" `
@@ -140,6 +152,7 @@ jobs:
             --hidden-import "file_utils" \
             --hidden-import "youtube_download" \
             --collect-submodules "yt_dlp" \
+            --collect-all "yt_dlp_ejs" \
             --collect-all "faster_whisper" \
             --collect-all "ctranslate2" \
             --collect-all "onnxruntime" \

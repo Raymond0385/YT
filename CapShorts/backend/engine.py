@@ -1341,7 +1341,7 @@ def youtube_info(payload: YoutubeUrlPayload):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         print(f"[youtube] info error: {e}")
-        raise HTTPException(status_code=502, detail="Could not read this video. Check the link or try again later.")
+        raise HTTPException(status_code=502, detail=yt.explain_error(e))
 
 YOUTUBE_FILES: Dict[str, str] = {}
 
@@ -1361,7 +1361,7 @@ def run_youtube_job(task_id: str, url: str, quality: str, out_dir: str):
         print(f"[youtube] download error: {e}")
         update_task_state(YOUTUBE_JOBS, task_id, {
             "progress": 0, "step": "Download failed", "status": "error",
-            "error": "Download failed. The video may be private, age-restricted or unavailable."
+            "error": yt.explain_error(e)
         })
 
 @app.post("/api/youtube/download", dependencies=[Depends(verify_loopback_request), Depends(verify_local_origin)])

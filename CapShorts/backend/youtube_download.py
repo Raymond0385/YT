@@ -4,7 +4,8 @@ Only download content you own or have permission to use; respect YouTube's Terms
 """
 
 import os
-from typing import Any, Callable, Dict, Optional
+import shutil
+from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urlparse
 
 ALLOWED_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be", "www.youtu.be"}
@@ -50,10 +51,31 @@ def resolve_download_dir(path: Optional[str]) -> str:
     return os.path.normpath(raw)
 
 
+def find_js_runtimes(search_dirs: Optional[List[str]] = None) -> Dict[str, Dict[str, str]]:
+    """
+    YouTube only hands out most formats after a small JavaScript challenge is solved, which yt-dlp does by
+    running a JS engine. Returns {runtime_name: {"path": exe}} for the engines we can find: a bundled QuickJS
+    (qjs) in `search_dirs` first, then deno / node / bun / qjs on PATH.
+    """
+    found: Dict[str, Dict[str, str]] = {}
+    dirs = [d for d in (search_dirs or []) if d and os.path.isdir(d)]
+    candidates = (("quickjs", "qjs"), ("deno", "deno"), ("node", "node"), ("bun", "bun"))
+    for name, exe in candidates:
+        path = shutil.which(exe, path=os.pathsep.join(dirs)) if dirs else None
+        if not path:
+            path = shutil.which(exe)
+        if path:
+            found[name] = {"path": path}
+    return found
+
+
 def _base_opts(ffmpeg_dir: Optional[str]) -> Dict[str, Any]:
     opts: Dict[str, Any] = {"quiet": True, "no_warnings": True, "noplaylist": True, "socket_timeout": 20}
     if ffmpeg_dir and os.path.isdir(ffmpeg_dir):
         opts["ffmpeg_location"] = ffmpeg_dir
+    runtimes = find_js_runtimes([ffmpeg_dir] if ffmpeg_dir else None)
+    if runtimes:
+        opts["js_runtimes"] = runtimes
     return opts
 
 
@@ -105,3 +127,22 @@ def download_video(url: str, out_dir: str, quality: str,
     if not path or not os.path.isfile(path):
         raise RuntimeError("Download finished but the file was not found")
     return path
+
+
+def explain_error(err: Exception) -> str:
+    """Turns a yt-dlp failure into a short message the user can act on."""
+    text = str(err).lower()
+    if "not available" in text and not find_js_runtimes():
+        return ("YouTube refused this video. The app needs a JavaScript engine to read YouTube; "
+                "reinstall the latest CapShorts or install Node.js, then try again.")
+    if "sign in" in text or "age" in text and "confirm" in text:
+        return "This video needs a signed-in YouTube account (age-restricted or private)."
+    if "private" in text:
+        return "This video is private."
+    if "not available" in text or "unavailable" in text:
+        return "YouTube says this video is not available (removed, blocked in your country or restricted)."
+    if "copyright" in text:
+        return "This video is blocked for copyright reasons."
+    if "urlopen error" in text or "timed out" in text or "getaddrinfo" in text:
+        return "No connection to YouTube. Check your internet and try again."
+    return "Could not read this video. Check the link or try again later."
