@@ -5,7 +5,28 @@ Dynamically scales font size, margins, and positioning across 9:16 Shorts, 16:9 
 """
 
 import math
+import re
 from typing import List, Dict, Any, Optional
+
+_CSS_RGB = re.compile(
+    r"^\s*rgba?\(\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*(?:[,/]\s*([0-9.]+%?)\s*)?\)\s*$", re.I)
+
+
+def _parse_css_rgb(value):
+    """'rgba(0,0,0,0.9)' -> (0, 0, 0, 0.9); None if it is not a css rgb()/rgba() color."""
+    m = _CSS_RGB.match(str(value))
+    if not m:
+        return None
+    r_v, g_v, b_v = (max(0, min(255, int(m.group(i)))) for i in (1, 2, 3))
+    a_raw = m.group(4)
+    if a_raw is None:
+        opacity = 1.0
+    elif a_raw.endswith("%"):
+        opacity = float(a_raw[:-1]) / 100.0
+    else:
+        opacity = float(a_raw)
+    return r_v, g_v, b_v, opacity
+
 
 def hex_to_ass_color(hex_str: str, alpha: int = 0) -> str:
     """
@@ -15,6 +36,13 @@ def hex_to_ass_color(hex_str: str, alpha: int = 0) -> str:
     if not hex_str:
         return "&H00FFFFFF&"
     
+    css = _parse_css_rgb(hex_str)
+    if css is not None:
+        r_v, g_v, b_v, opacity = css
+        # rgba() carries its own opacity, exactly like the editor preview uses it
+        ass_alpha = 255 - int(round(max(0.0, min(1.0, opacity)) * 255))
+        return f"&H{ass_alpha:02X}{b_v:02X}{g_v:02X}{r_v:02X}&"
+
     clean_hex = hex_str.strip().lstrip("#")
     
     if len(clean_hex) == 8:
@@ -99,14 +127,14 @@ def compute_layout(style: Dict[str, Any], video_width: int, video_height: int) -
     if is_vertical_short:
         scale_ratio = video_height / 1920.0
         font_size = max(44, int(base_font_size * 1.15 * scale_ratio))
-        outline = max(3.0, outline_width * scale_ratio)
-        shadow = max(2.0, shadow_depth * scale_ratio)
+        outline = max(3.0, outline_width * scale_ratio) if outline_width > 0 else 0.0
+        shadow = max(2.0, shadow_depth * scale_ratio) if shadow_depth > 0 else 0.0
         default_bottom_pct = 0.20
     else:
         scale_ratio = video_height / 720.0
         font_size = max(34, int(38.0 * scale_ratio))
-        outline = max(2.5, outline_width * 0.75 * scale_ratio)
-        shadow = max(1.5, shadow_depth * 0.75 * scale_ratio)
+        outline = max(2.5, outline_width * 0.75 * scale_ratio) if outline_width > 0 else 0.0
+        shadow = max(1.5, shadow_depth * 0.75 * scale_ratio) if shadow_depth > 0 else 0.0
         default_bottom_pct = 0.13
 
     if "top" in position:
@@ -166,7 +194,13 @@ def generate_ass_subtitles(
 
     # Border style: 1 = outline + drop shadow, 3 = opaque box
     border_style = 3 if style.get("bgBox", False) else 1
-    back_colour = hex_to_ass_color(style.get("bgBoxColor", "#000000"), alpha=120) if border_style == 3 else shadow_color_ass
+    back_colour = hex_to_ass_color(style.get("bgBoxColor", "#000000")) if border_style == 3 else shadow_color_ass
+    if border_style == 3:
+        # In box mode libass draws the box with the outline colour and sizes it by the outline width,
+        # so both must describe the box (an outline of 0 used to make the box disappear).
+        outline_color_ass = back_colour
+        scaled_outline = max(scaled_outline, scaled_font_size * 0.16)
+        scaled_shadow = 0.0
 
     header = f"""[Script Info]
 Title: CapShorts Export
