@@ -1090,6 +1090,54 @@ class YoutubeDownloadPayload(BaseModel):
     url: str
     quality: str = "1080"
 
+class YoutubeSettingsPayload(BaseModel):
+    download_dir: Optional[str] = None
+
+APP_SETTINGS_FILE = os.path.join(BASE_DIR, "settings.json")
+LOCAL_ORIGIN_HOSTS = {"localhost", "127.0.0.1", "[::1]", "tauri.localhost"}
+
+def verify_local_origin(request: Request):
+    """Blocks browser pages from other sites (CORS is open) from changing settings or writing files."""
+    origin = request.headers.get("origin")
+    if origin and origin != "null":
+        host = urllib.parse.urlparse(origin).hostname or ""
+        if host not in LOCAL_ORIGIN_HOSTS and f"[{host}]" not in LOCAL_ORIGIN_HOSTS:
+            raise HTTPException(status_code=403, detail="Forbidden origin")
+    elif origin == "null":
+        raise HTTPException(status_code=403, detail="Forbidden origin")
+
+def load_app_settings() -> Dict[str, Any]:
+    try:
+        with open(APP_SETTINGS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+def current_download_dir() -> str:
+    """Saved download folder if still valid, otherwise the user's Downloads folder."""
+    try:
+        return yt.resolve_download_dir(load_app_settings().get("youtube_download_dir"))
+    except ValueError:
+        return yt.default_download_dir()
+
+@app.get("/api/youtube/settings")
+def youtube_get_settings():
+    return {"download_dir": current_download_dir(), "default_dir": yt.default_download_dir()}
+
+@app.post("/api/youtube/settings", dependencies=[Depends(verify_loopback_request), Depends(verify_local_origin)])
+def youtube_set_settings(payload: YoutubeSettingsPayload):
+    """Saves the folder YouTube downloads go to (empty = Downloads folder)."""
+    try:
+        folder = yt.resolve_download_dir(payload.download_dir)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    settings = load_app_settings()
+    settings["youtube_download_dir"] = folder
+    with open(APP_SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(settings, f, indent=2)
+    return {"download_dir": folder}
+
 def _ffmpeg_dir() -> Optional[str]:
     ffmpeg = get_ffmpeg_bin()
     return os.path.dirname(ffmpeg) if os.path.isabs(ffmpeg) else None
@@ -1105,13 +1153,17 @@ def youtube_info(payload: YoutubeUrlPayload):
         print(f"[youtube] info error: {e}")
         raise HTTPException(status_code=502, detail="Could not read this video. Check the link or try again later.")
 
-def run_youtube_job(task_id: str, url: str, quality: str):
+YOUTUBE_FILES: Dict[str, str] = {}
+
+def run_youtube_job(task_id: str, url: str, quality: str, out_dir: str):
     try:
         def on_progress(pct: int, step: str):
             update_task_state(YOUTUBE_JOBS, task_id, {"progress": pct, "step": step, "status": "processing"})
-        filename = yt.download_video(url, TEMP_DIR, yt.safe_basename(task_id), quality, on_progress, _ffmpeg_dir())
+        file_path = yt.download_video(url, out_dir, quality, on_progress, _ffmpeg_dir())
+        YOUTUBE_FILES[task_id] = file_path
         update_task_state(YOUTUBE_JOBS, task_id, {
-            "progress": 100, "step": "Download complete", "status": "completed", "video_path": filename
+            "progress": 100, "step": "Download complete", "status": "completed",
+            "saved_to": file_path, "file_name": os.path.basename(file_path)
         })
     except ValueError as e:
         update_task_state(YOUTUBE_JOBS, task_id, {"progress": 0, "step": str(e), "status": "error", "error": str(e)})
@@ -1122,18 +1174,19 @@ def run_youtube_job(task_id: str, url: str, quality: str):
             "error": "Download failed. The video may be private, age-restricted or unavailable."
         })
 
-@app.post("/api/youtube/download")
+@app.post("/api/youtube/download", dependencies=[Depends(verify_loopback_request), Depends(verify_local_origin)])
 def youtube_download(payload: YoutubeDownloadPayload, background_tasks: BackgroundTasks):
-    """Starts a background download of a YouTube video into the temp dir; poll /api/youtube/progress/{id}."""
+    """Starts a background download into the chosen folder (default: Downloads); poll /api/youtube/progress/{id}."""
     try:
         url = yt.validate_youtube_url(payload.url)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    out_dir = current_download_dir()
     prune_stale_tasks(YOUTUBE_JOBS)
     task_id = str(uuid.uuid4())[:8]
     update_task_state(YOUTUBE_JOBS, task_id, {"progress": 1, "step": "Starting download...", "status": "processing"})
-    background_tasks.add_task(run_youtube_job, task_id, url, payload.quality)
-    return {"status": "started", "task_id": task_id}
+    background_tasks.add_task(run_youtube_job, task_id, url, payload.quality, out_dir)
+    return {"status": "started", "task_id": task_id, "download_dir": out_dir}
 
 @app.get("/api/youtube/progress/{task_id}")
 def youtube_progress(task_id: str):
@@ -1141,10 +1194,12 @@ def youtube_progress(task_id: str):
         raise HTTPException(status_code=404, detail="Download task not found")
     return YOUTUBE_JOBS[task_id]
 
-@app.get("/api/source-video/{filename}")
-def get_source_video(filename: str):
-    """Serves a downloaded source video from the temp dir so the editor can load it."""
-    path = resolve_video_file(filename)
+@app.get("/api/youtube/file/{task_id}")
+def youtube_file(task_id: str):
+    """Streams the file downloaded by this session's task so the editor can open it (nothing is copied to temp)."""
+    path = YOUTUBE_FILES.get(task_id)
+    if not path or not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Downloaded file not found")
     return FileResponse(path=path, media_type="video/mp4", filename=os.path.basename(path))
 
 class ScriptConvertPayload(BaseModel):

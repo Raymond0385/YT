@@ -149,6 +149,48 @@ export const MediaLibraryPanel: React.FC = () => {
   const [ytProgress, setYtProgress] = useState(0);
   const [ytStep, setYtStep] = useState('');
   const [ytError, setYtError] = useState<string | null>(null);
+  const [ytDir, setYtDir] = useState('');
+  const [ytDirDraft, setYtDirDraft] = useState('');
+  const [ytSavedTo, setYtSavedTo] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    fetch(apiUrl('/api/youtube/settings'))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.download_dir) {
+          setYtDir(d.download_dir);
+          setYtDirDraft(d.download_dir);
+        }
+      })
+      .catch(() => { /* backend offline: folder shows once it is reachable */ });
+  }, []);
+
+  const saveYoutubeDir = async (dir: string) => {
+    setYtError(null);
+    try {
+      const res = await fetch(apiUrl('/api/youtube/settings'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ download_dir: dir })
+      });
+      if (!res.ok) throw new Error(await readApiError(res, 'Could not use this folder'));
+      const d = await res.json();
+      setYtDir(d.download_dir);
+      setYtDirDraft(d.download_dir);
+    } catch (e: any) {
+      setYtError(e?.message || 'Could not use this folder');
+    }
+  };
+
+  const browseYoutubeDir = async () => {
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const picked = await open({ directory: true, multiple: false, defaultPath: ytDir || undefined });
+      if (typeof picked === 'string') await saveYoutubeDir(picked);
+    } catch {
+      setYtError('Folder picker is available in the desktop app. Type the full folder path instead.');
+    }
+  };
 
   const readApiError = async (res: Response, fallback: string) => {
     try {
@@ -185,6 +227,7 @@ export const MediaLibraryPanel: React.FC = () => {
     setYtError(null);
     setYtProgress(1);
     setYtStep('Starting download...');
+    setYtSavedTo(null);
     try {
       const startRes = await fetch(apiUrl('/api/youtube/download'), {
         method: 'POST',
@@ -194,8 +237,9 @@ export const MediaLibraryPanel: React.FC = () => {
       if (!startRes.ok) throw new Error(await readApiError(startRes, 'Could not start download'));
       const { task_id } = await startRes.json();
 
-      let videoPath: string | null = null;
-      while (!videoPath) {
+      let done = false;
+      let savedTo = '';
+      while (!done) {
         await new Promise((r) => setTimeout(r, 1000));
         const progRes = await fetch(apiUrl(`/api/youtube/progress/${task_id}`));
         if (!progRes.ok) throw new Error('Download task lost');
@@ -203,11 +247,14 @@ export const MediaLibraryPanel: React.FC = () => {
         setYtProgress(prog.progress ?? 0);
         setYtStep(prog.step || '');
         if (prog.status === 'error') throw new Error(prog.error || 'Download failed');
-        if (prog.status === 'completed') videoPath = prog.video_path;
+        if (prog.status === 'completed') {
+          done = true;
+          savedTo = prog.saved_to || '';
+        }
       }
 
       setYtStep('Loading video into the editor...');
-      const fileRes = await fetch(apiUrl(`/api/source-video/${encodeURIComponent(videoPath)}`));
+      const fileRes = await fetch(apiUrl(`/api/youtube/file/${task_id}`));
       if (!fileRes.ok) throw new Error('Could not load downloaded video');
       const blob = await fileRes.blob();
       const baseName = (ytInfo?.title || 'youtube-video').replace(/[^\w\- .]+/g, ' ').trim().slice(0, 80) || 'youtube-video';
@@ -216,6 +263,7 @@ export const MediaLibraryPanel: React.FC = () => {
       setActiveTab('captions');
       setYtProgress(100);
       setYtStep('Done');
+      setYtSavedTo(savedTo || null);
     } catch (e: any) {
       setYtError(e?.message || 'Download failed');
     } finally {
@@ -402,6 +450,29 @@ export const MediaLibraryPanel: React.FC = () => {
               disabled={ytBusy !== null}
               className="w-full bg-zinc-950/80 border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition-colors"
             />
+            <div className="space-y-1" data-testid="youtube-folder">
+              <label className="text-[11px] font-semibold text-zinc-300">Save to folder</label>
+              <div className="flex items-center space-x-2">
+                <input
+                  value={ytDirDraft}
+                  onChange={(e) => setYtDirDraft(e.target.value)}
+                  onBlur={() => { if (ytDirDraft.trim() && ytDirDraft !== ytDir) saveYoutubeDir(ytDirDraft); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') saveYoutubeDir(ytDirDraft); }}
+                  disabled={ytBusy !== null}
+                  placeholder="C:\Users\you\Downloads"
+                  className="flex-1 min-w-0 bg-zinc-950/80 border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+                <button
+                  onClick={browseYoutubeDir}
+                  disabled={ytBusy !== null}
+                  className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white border border-white/10 disabled:opacity-50 flex items-center space-x-1"
+                >
+                  <FolderOpen className="w-3.5 h-3.5" />
+                  <span>Browse</span>
+                </button>
+              </div>
+              <p className="text-[10px] text-zinc-500">Downloads are saved only here (default: Downloads).</p>
+            </div>
             <div className="flex items-center space-x-2">
               <select
                 value={ytQuality}
@@ -458,6 +529,12 @@ export const MediaLibraryPanel: React.FC = () => {
                 <div className="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden">
                   <div className="bg-gradient-to-r from-red-400 to-rose-400 h-1.5 rounded-full transition-all duration-300" style={{ width: `${Math.max(3, ytProgress)}%` }} />
                 </div>
+              </div>
+            )}
+
+            {ytSavedTo && (
+              <div className="p-2.5 rounded-xl bg-emerald-950/30 border border-emerald-500/30 text-emerald-300 text-[11px] break-all" data-testid="youtube-saved">
+                Saved to: {ytSavedTo}
               </div>
             )}
 

@@ -4,7 +4,6 @@ Only download content you own or have permission to use; respect YouTube's Terms
 """
 
 import os
-import re
 from typing import Any, Callable, Dict, Optional
 from urllib.parse import urlparse
 
@@ -29,6 +28,28 @@ def build_format(quality: str) -> str:
     return f"bv*[height<={h}][ext=mp4]+ba[ext=m4a]/b[height<={h}][ext=mp4]/bv*[height<={h}]+ba/b[height<={h}]/b"
 
 
+def default_download_dir() -> str:
+    """The user's Downloads folder (falls back to the home directory)."""
+    downloads = os.path.join(os.path.expanduser("~"), "Downloads")
+    return downloads if os.path.isdir(downloads) else os.path.expanduser("~")
+
+
+def resolve_download_dir(path: Optional[str]) -> str:
+    """Validates a user-chosen folder: absolute path, created if missing, must be a writable directory."""
+    if not path or not str(path).strip():
+        return default_download_dir()
+    raw = os.path.expandvars(os.path.expanduser(str(path).strip().strip('"')))
+    if chr(0) in raw or not os.path.isabs(raw):
+        raise ValueError("Download folder must be a full path")
+    try:
+        os.makedirs(raw, exist_ok=True)
+    except OSError:
+        raise ValueError("Cannot create this folder")
+    if not os.path.isdir(raw) or not os.access(raw, os.W_OK):
+        raise ValueError("This folder is not writable")
+    return os.path.normpath(raw)
+
+
 def _base_opts(ffmpeg_dir: Optional[str]) -> Dict[str, Any]:
     opts: Dict[str, Any] = {"quiet": True, "no_warnings": True, "noplaylist": True, "socket_timeout": 20}
     if ffmpeg_dir and os.path.isdir(ffmpeg_dir):
@@ -49,9 +70,9 @@ def fetch_info(url: str, ffmpeg_dir: Optional[str] = None) -> Dict[str, Any]:
     }
 
 
-def download_video(url: str, out_dir: str, basename: str, quality: str,
+def download_video(url: str, out_dir: str, quality: str,
                    on_progress: Callable[[int, str], None], ffmpeg_dir: Optional[str] = None) -> str:
-    """Downloads into out_dir/<basename>.mp4 and returns the file name. Calls on_progress(percent, step)."""
+    """Downloads into out_dir as '<title> [<id>].mp4' and returns the full file path. Calls on_progress(percent, step)."""
     import yt_dlp
     url = validate_youtube_url(url)
     info = fetch_info(url, ffmpeg_dir)
@@ -72,18 +93,15 @@ def download_video(url: str, out_dir: str, basename: str, quality: str,
         **_base_opts(ffmpeg_dir),
         "format": build_format(quality),
         "merge_output_format": "mp4",
-        "outtmpl": os.path.join(out_dir, f"{basename}.%(ext)s"),
+        "outtmpl": os.path.join(out_dir, "%(title).80B [%(id)s].%(ext)s"),
         "progress_hooks": [hook],
-        "restrictfilenames": True,
+        "windowsfilenames": True,
     }
     with yt_dlp.YoutubeDL(opts) as ydl:
-        ydl.download([url])
+        result = ydl.extract_info(url, download=True)
 
-    for name in os.listdir(out_dir):
-        if name.startswith(basename + ".") and not name.endswith((".part", ".ytdl")):
-            return name
-    raise RuntimeError("Download finished but the file was not found")
-
-
-def safe_basename(task_id: str) -> str:
-    return "yt_" + re.sub(r"[^a-zA-Z0-9]", "", task_id)
+    downloads = result.get("requested_downloads") or []
+    path = downloads[0].get("filepath") if downloads else None
+    if not path or not os.path.isfile(path):
+        raise RuntimeError("Download finished but the file was not found")
+    return path

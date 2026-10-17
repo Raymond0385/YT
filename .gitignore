@@ -131,3 +131,6 @@ Thumbs.db
 *.swo
 *~
 scratch/
+
+backend/settings.json
+CapShorts/backend/settings.json

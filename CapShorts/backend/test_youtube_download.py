@@ -1,5 +1,8 @@
+import os
+
 import pytest
-from youtube_download import validate_youtube_url, build_format, safe_basename
+
+from youtube_download import validate_youtube_url, build_format, resolve_download_dir, default_download_dir
 
 
 @pytest.mark.parametrize("url", [
@@ -28,5 +31,22 @@ def test_build_format_respects_height_and_unknown_quality():
     assert "height<=4320" in build_format("best")
 
 
-def test_safe_basename_strips_unsafe_chars():
-    assert safe_basename("ab-12/../x") == "yt_ab12x"
+def test_download_dir_default_and_custom(tmp_path):
+    assert resolve_download_dir(None) == default_download_dir()
+    assert resolve_download_dir("  ") == default_download_dir()
+    target = tmp_path / "videos" / "yt"
+    assert resolve_download_dir(str(target)) == os.path.normpath(str(target))
+    assert target.is_dir()
+
+
+@pytest.mark.parametrize("bad", ["relative/folder", "x/../y", "bad" + chr(0) + "path"])
+def test_download_dir_rejects_relative_and_nul(bad):
+    with pytest.raises(ValueError):
+        resolve_download_dir(bad)
+
+
+def test_download_dir_rejects_file(tmp_path):
+    f = tmp_path / "a.txt"
+    f.write_text("x")
+    with pytest.raises(ValueError):
+        resolve_download_dir(str(f))
