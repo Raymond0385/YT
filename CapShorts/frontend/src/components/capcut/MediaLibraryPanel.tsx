@@ -36,6 +36,8 @@ type LibraryTab = 'media' | 'captions' | 'text' | 'audio' | 'broll' | 'shorts';
 const TEMPLATE_CATEGORIES = ["All", "Viral Shorts", "Neon & Gaming", "Documentary & Clean", "Karaoke Sweep", "Urdu"];
 
 export const MediaLibraryPanel: React.FC = () => {
+  const [scriptText, setScriptText] = React.useState('');
+  const [localNotice, setLocalNotice] = React.useState<string | null>(null);
   const {
     videoFile,
     videoUrl,
@@ -47,6 +49,10 @@ export const MediaLibraryPanel: React.FC = () => {
     setSelectedLanguage,
     selectedModel,
     setSelectedModel,
+    glossary,
+    setGlossary,
+    applyGlossaryToTranscript,
+    alignTranscriptToText,
     transcript,
     activeTemplateId,
     setActiveTemplate,
@@ -86,6 +92,10 @@ export const MediaLibraryPanel: React.FC = () => {
       setSelectedLanguage: state.setSelectedLanguage,
       selectedModel: state.selectedModel,
       setSelectedModel: state.setSelectedModel,
+      glossary: state.glossary,
+      setGlossary: state.setGlossary,
+      applyGlossaryToTranscript: state.applyGlossaryToTranscript,
+      alignTranscriptToText: state.alignTranscriptToText,
       transcript: state.transcript,
       activeTemplateId: state.activeTemplateId,
       setActiveTemplate: state.setActiveTemplate,
@@ -330,6 +340,56 @@ export const MediaLibraryPanel: React.FC = () => {
                   <option value="small">💻 High Accuracy Offline Engine (On-Device)</option>
                 </select>
               </div>
+
+              {/* Glossary: names/terms Whisper often mishears */}
+              <div className="space-y-1.5" data-testid="glossary-block">
+                <label className="text-[11px] font-semibold text-zinc-300">Glossary (names &amp; terms)</label>
+                <textarea
+                  value={glossary}
+                  onChange={(e) => setGlossary(e.target.value)}
+                  rows={2}
+                  placeholder="ChatGPT, Kubernetes, CapShorts"
+                  className="w-full bg-zinc-950/80 border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition-colors resize-none"
+                />
+                {transcript.length > 0 && (
+                  <button
+                    onClick={async () => {
+                      const n = await applyGlossaryToTranscript();
+                      setLocalNotice(n > 0 ? `Glossary applied: ${n} word(s) fixed` : 'Glossary: nothing to fix');
+                    }}
+                    disabled={!glossary.trim()}
+                    className="text-[10px] text-indigo-400 hover:underline disabled:opacity-40 disabled:no-underline"
+                  >
+                    Apply glossary to current captions
+                  </button>
+                )}
+              </div>
+
+              {/* Paste a script: keep word timings, replace the text */}
+              {transcript.length > 0 && (
+                <div className="space-y-1.5" data-testid="align-block">
+                  <label className="text-[11px] font-semibold text-zinc-300">Fix text from script</label>
+                  <textarea
+                    value={scriptText}
+                    onChange={(e) => setScriptText(e.target.value)}
+                    rows={3}
+                    placeholder="Paste the correct text. Existing word timings are kept."
+                    className="w-full bg-zinc-950/80 border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition-colors resize-none"
+                  />
+                  <button
+                    onClick={async () => {
+                      const ok = await alignTranscriptToText(scriptText);
+                      setLocalNotice(ok ? 'Captions updated from script' : 'Could not align script');
+                      if (ok) setScriptText('');
+                    }}
+                    disabled={!scriptText.trim()}
+                    className="text-[10px] text-indigo-400 hover:underline disabled:opacity-40 disabled:no-underline"
+                  >
+                    Align script to captions
+                  </button>
+                </div>
+              )}
+              {localNotice && <div className="text-[10px] text-emerald-400">{localNotice}</div>}
 
               {/* Transcribe Action Button */}
               <button

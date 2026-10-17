@@ -42,6 +42,7 @@ from broll import search_pexels_videos, download_broll_clip, build_ffmpeg_broll_
 from clip_generator import detect_viral_clips
 from groq_transcribe import transcribe_with_groq_pool
 from transliterate import transliterate_transcript, transliterate_word
+from text_align import align_words, apply_glossary, collapse_repeats, sanitize_words, fix_durations
 from telemetry import telemetry
 
 app = FastAPI(title="CapShorts AI Engine", version="1.2.0")
@@ -341,10 +342,15 @@ def check_ffmpeg() -> bool:
 
 LOCAL_BASE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", "base")
 
+# UI/API model names -> faster-whisper model ids ("turbo"/"large" no longer silently fall back to base)
+LOCAL_MODEL_ALIASES = {"turbo": "large-v3-turbo", "large": "large-v3"}
+LOCAL_MODEL_CHOICES = {"tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"}
+
 def get_whisper_model(model_size: str = "base"):
     """Thread-safe loader for faster-whisper model."""
     # Normalize model size for offline faster-whisper engine (preserves large model selection)
-    if not model_size or "turbo" in model_size or model_size not in ["tiny", "base", "small", "medium", "large"]:
+    model_size = LOCAL_MODEL_ALIASES.get(model_size, model_size)
+    if not model_size or model_size not in LOCAL_MODEL_CHOICES:
         model_size = "base"
 
     with MODEL_LOAD_LOCK:
@@ -375,6 +381,16 @@ def get_whisper_model(model_size: str = "base"):
         except Exception as e:
             print(f"[engine] Warning: Faster-Whisper could not be loaded: {e}")
             return None
+
+def glossary_prompt(glossary: Optional[List[str]]) -> Optional[str]:
+    """Builds a Whisper prompt biasing recognition toward user-supplied names/terms."""
+    terms = [t.strip() for t in (glossary or []) if t and t.strip()]
+    return (", ".join(terms))[:200] or None
+
+def clean_transcript(words: List[Dict[str, Any]], glossary: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    """Levenshtein-based post-processing: drop junk/loops, fix timings, apply glossary."""
+    words = sanitize_words(collapse_repeats(words))
+    return apply_glossary(words, glossary) if glossary else words
 
 def tag_keywords(words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Tags high-impact words as keywords for styling and B-roll discovery."""
@@ -482,7 +498,8 @@ def run_transcribe_job(
     model: str,
     language: Optional[str],
     groq_api_key: Optional[str] = None,
-    range_mode: str = "full"
+    range_mode: str = "full",
+    glossary: Optional[List[str]] = None
 ):
     """
     Background worker executing either ultra-fast Groq Cloud AI (~2 seconds)
@@ -527,8 +544,8 @@ def run_transcribe_job(
                     "status": "processing"
                 })
 
-                words_result, dur = transcribe_with_groq_pool(audio_mp3, key_pool, language)
-                words_result = tag_keywords(words_result)
+                words_result, dur = transcribe_with_groq_pool(audio_mp3, key_pool, language, prompt=glossary_prompt(glossary))
+                words_result = tag_keywords(clean_transcript(words_result, glossary))
 
                 update_task_state(TRANSCRIBE_JOBS, task_id, {
                     "progress": 90,
@@ -615,8 +632,11 @@ def run_transcribe_job(
                 segments, info = whisper_engine.transcribe(
                     audio_wav,
                     word_timestamps=True,
-                    beam_size=1,
-                    language=whisper_lang
+                    beam_size=5,
+                    language=whisper_lang,
+                    vad_filter=True,
+                    condition_on_previous_text=False,
+                    initial_prompt=glossary_prompt(glossary)
                 )
 
                 actual_dur = audio_duration if audio_duration > 0 else 60.0
@@ -653,7 +673,7 @@ def run_transcribe_job(
             if language in ["urdu", "ur", "roman", "roman_urdu"]:
                 words_result = transliterate_transcript(words_result)
 
-            words_result = tag_keywords(words_result)
+            words_result = tag_keywords(clean_transcript(words_result, glossary))
 
             update_task_state(TRANSCRIBE_JOBS, task_id, {
                 "progress": 95,
@@ -740,7 +760,8 @@ def start_transcription(
     model: str = Form("base"),
     language: Optional[str] = Form(None),
     groq_api_key: Optional[str] = Form(None),
-    range_mode: str = Form("full")
+    range_mode: str = Form("full"),
+    glossary: Optional[str] = Form(None)
 ):
     """
     Begins transcribing video speech and extracting viral shorts via threadpool background worker.
@@ -772,7 +793,8 @@ def start_transcription(
         model,
         language,
         groq_api_key,
-        range_mode
+        range_mode,
+        [t.strip() for t in re.split(r"[,\n]", glossary) if t.strip()] if glossary else None
     )
     return {"status": "started", "task_id": task_id, "video_path": os.path.basename(target_video)}
 
@@ -1071,6 +1093,28 @@ def convert_script(payload: ScriptConvertPayload):
         converted = transliterate_transcript(words_dicts)
         return {"words": converted}
     return {"words": words_dicts}
+
+class AlignPayload(BaseModel):
+    words: List[WordItem]
+    text: str
+
+class GlossaryPayload(BaseModel):
+    words: List[WordItem]
+    glossary: List[str]
+    threshold: float = Field(default=0.25, ge=0.0, le=0.6)
+
+def _dump_words(words) -> List[Dict[str, Any]]:
+    return [w.model_dump() for w in words]
+
+@app.post("/api/transcript/align")
+def align_transcript(payload: AlignPayload):
+    """Re-times an edited/pasted script onto the existing word timings (token-level Levenshtein alignment)."""
+    return {"words": fix_durations(align_words(_dump_words(payload.words), payload.text))}
+
+@app.post("/api/transcript/glossary")
+def glossary_transcript(payload: GlossaryPayload):
+    """Fuzzy-replaces misheard words with user glossary terms (normalized Levenshtein)."""
+    return {"words": apply_glossary(_dump_words(payload.words), payload.glossary, payload.threshold)}
 
 def resolve_video_file(path: Optional[str]) -> str:
     """Helper to resolve a video file path safely strictly within approved directories (TEMP_DIR, OUTPUT_DIR)."""

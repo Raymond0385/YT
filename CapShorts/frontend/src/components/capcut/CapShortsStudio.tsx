@@ -230,7 +230,7 @@ export const CapShortsStudio: React.FC = () => {
 
   // Toast
   const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);

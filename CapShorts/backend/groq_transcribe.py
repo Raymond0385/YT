@@ -6,7 +6,8 @@ from transliterate import transliterate_transcript
 def transcribe_with_groq_pool(
     audio_file_path: str,
     api_keys: List[str],
-    language: Optional[str] = None
+    language: Optional[str] = None,
+    prompt: Optional[str] = None
 ) -> Tuple[List[Dict[str, Any]], float]:
     """
     Ultra-fast cloud transcription via Groq Whisper Large-v3 with Key Pool Auto-Rotation.
@@ -54,6 +55,8 @@ def transcribe_with_groq_pool(
                 }
                 if api_language:
                     data["language"] = api_language
+                if prompt:
+                    data["prompt"] = prompt
 
                 res = requests.post(url, headers=headers, files=files, data=data, timeout=90)
 

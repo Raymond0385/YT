@@ -95,7 +95,7 @@ export const ExportModal: React.FC = () => {
   const [exportingSubtitle, setExportingSubtitle] = useState<'srt' | 'vtt' | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     return () => {

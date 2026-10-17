@@ -93,6 +93,10 @@ interface VideoStoreState {
   setActiveTab: (tab: 'presets' | 'broll' | 'clips' | 'inspector') => void;
   setExportSettings: (settings: Partial<ExportSettings>) => void;
   convertTranscriptScript: (targetScript: string) => Promise<void>;
+  glossary: string;
+  setGlossary: (glossary: string) => void;
+  applyGlossaryToTranscript: () => Promise<number>;
+  alignTranscriptToText: (text: string) => Promise<boolean>;
 
   // CapCut Desktop Studio State
   projectTitle: string;
@@ -232,6 +236,13 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
   setSelectedLanguage: (selectedLanguage) => set({ selectedLanguage }),
   selectedModel: 'whisper-large-v3-turbo',
   setSelectedModel: (selectedModel) => set({ selectedModel }),
+  glossary: (() => {
+    try { return localStorage.getItem('capshorts.glossary') || ''; } catch { return ''; }
+  })(),
+  setGlossary: (glossary) => {
+    try { localStorage.setItem('capshorts.glossary', glossary); } catch { /* storage unavailable */ }
+    set({ glossary });
+  },
   exportStatus: 'Idle',
   exportResultUrl: null,
   isExportModalOpen: false,
@@ -399,7 +410,7 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
   setTranscribingStep: (transcribingStep) => set({ transcribingStep }),
 
   startTranscription: async (file: File, model?: string, language?: string) => {
-    const { groqApiKey, rangeMode, selectedModel, selectedLanguage } = get();
+    const { groqApiKey, rangeMode, selectedModel, selectedLanguage, glossary } = get();
     const effectiveModel = model || selectedModel || 'whisper-large-v3-turbo';
     const effectiveLanguage = language || selectedLanguage || 'auto';
     const isTurbo = Boolean(groqApiKey && groqApiKey.trim().length > 10);
@@ -419,6 +430,9 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
       formData.append('model', effectiveModel);
       formData.append('language', effectiveLanguage);
       formData.append('range_mode', rangeMode);
+      if (glossary.trim()) {
+        formData.append('glossary', glossary);
+      }
       if (groqApiKey) {
         formData.append('groq_api_key', groqApiKey.trim());
       }
@@ -590,6 +604,48 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
       }
     } catch (e) {
       console.warn("Script conversion error:", e);
+    }
+  },
+
+  applyGlossaryToTranscript: async () => {
+    const { transcript, glossary } = get();
+    const terms = glossary.split(/[,\n]/).map((t) => t.trim()).filter(Boolean);
+    if (!transcript || transcript.length === 0 || terms.length === 0) return 0;
+    try {
+      const res = await fetch(apiUrl('/api/transcript/glossary'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ words: transcript, glossary: terms })
+      });
+      if (!res.ok) return 0;
+      const data = await res.json();
+      if (!Array.isArray(data.words)) return 0;
+      const changed = data.words.filter((w: WordToken, i: number) => transcript[i]?.word !== w.word).length;
+      set({ transcript: data.words });
+      return changed;
+    } catch (e) {
+      console.warn("Glossary error:", e);
+      return 0;
+    }
+  },
+
+  alignTranscriptToText: async (text: string) => {
+    const { transcript } = get();
+    if (!text.trim()) return false;
+    try {
+      const res = await fetch(apiUrl('/api/transcript/align'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ words: transcript || [], text })
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (!Array.isArray(data.words)) return false;
+      set({ transcript: data.words });
+      return true;
+    } catch (e) {
+      console.warn("Align error:", e);
+      return false;
     }
   },
 
