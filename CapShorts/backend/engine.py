@@ -42,6 +42,7 @@ from broll import search_pexels_videos, download_broll_clip, build_ffmpeg_broll_
 from clip_generator import detect_viral_clips
 from groq_transcribe import transcribe_with_groq_pool
 from transliterate import transliterate_transcript, transliterate_word
+import youtube_download as yt
 from text_align import align_words, apply_glossary, collapse_repeats, sanitize_words, fix_durations
 from telemetry import telemetry
 
@@ -171,6 +172,7 @@ MAX_TASK_ENTRIES = 200
 
 EXPORT_TASKS: Dict[str, Dict[str, Any]] = {}
 TRANSCRIBE_JOBS: Dict[str, Dict[str, Any]] = {}
+YOUTUBE_JOBS: Dict[str, Dict[str, Any]] = {}
 MODEL_LOAD_LOCK = threading.Lock()
 TRANSCRIBE_LOCK = threading.Lock()
 TASKS_LOCK = threading.Lock()
@@ -1080,6 +1082,70 @@ def download_exported_file(filename: str):
         media_type="video/mp4",
         filename=safe_name
     )
+
+class YoutubeUrlPayload(BaseModel):
+    url: str
+
+class YoutubeDownloadPayload(BaseModel):
+    url: str
+    quality: str = "1080"
+
+def _ffmpeg_dir() -> Optional[str]:
+    ffmpeg = get_ffmpeg_bin()
+    return os.path.dirname(ffmpeg) if os.path.isabs(ffmpeg) else None
+
+@app.post("/api/youtube/info")
+def youtube_info(payload: YoutubeUrlPayload):
+    """Returns title/duration/thumbnail for a YouTube link without downloading."""
+    try:
+        return yt.fetch_info(payload.url, _ffmpeg_dir())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[youtube] info error: {e}")
+        raise HTTPException(status_code=502, detail="Could not read this video. Check the link or try again later.")
+
+def run_youtube_job(task_id: str, url: str, quality: str):
+    try:
+        def on_progress(pct: int, step: str):
+            update_task_state(YOUTUBE_JOBS, task_id, {"progress": pct, "step": step, "status": "processing"})
+        filename = yt.download_video(url, TEMP_DIR, yt.safe_basename(task_id), quality, on_progress, _ffmpeg_dir())
+        update_task_state(YOUTUBE_JOBS, task_id, {
+            "progress": 100, "step": "Download complete", "status": "completed", "video_path": filename
+        })
+    except ValueError as e:
+        update_task_state(YOUTUBE_JOBS, task_id, {"progress": 0, "step": str(e), "status": "error", "error": str(e)})
+    except Exception as e:
+        print(f"[youtube] download error: {e}")
+        update_task_state(YOUTUBE_JOBS, task_id, {
+            "progress": 0, "step": "Download failed", "status": "error",
+            "error": "Download failed. The video may be private, age-restricted or unavailable."
+        })
+
+@app.post("/api/youtube/download")
+def youtube_download(payload: YoutubeDownloadPayload, background_tasks: BackgroundTasks):
+    """Starts a background download of a YouTube video into the temp dir; poll /api/youtube/progress/{id}."""
+    try:
+        url = yt.validate_youtube_url(payload.url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    prune_stale_tasks(YOUTUBE_JOBS)
+    task_id = str(uuid.uuid4())[:8]
+    update_task_state(YOUTUBE_JOBS, task_id, {"progress": 1, "step": "Starting download...", "status": "processing"})
+    background_tasks.add_task(run_youtube_job, task_id, url, payload.quality)
+    return {"status": "started", "task_id": task_id}
+
+@app.get("/api/youtube/progress/{task_id}")
+def youtube_progress(task_id: str):
+    if task_id not in YOUTUBE_JOBS:
+        raise HTTPException(status_code=404, detail="Download task not found")
+    return YOUTUBE_JOBS[task_id]
+
+@app.get("/api/source-video/{filename}")
+def get_source_video(filename: str):
+    """Serves a downloaded source video from the temp dir so the editor can load it."""
+    path = resolve_video_file(filename)
+    return FileResponse(path=path, media_type="video/mp4", filename=os.path.basename(path))
 
 class ScriptConvertPayload(BaseModel):
     words: List[WordItem]

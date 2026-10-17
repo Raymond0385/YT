@@ -21,7 +21,9 @@ import {
   Key,
   Clock,
   Download,
-  AlertCircle
+  AlertCircle,
+  CirclePlay,
+  Loader2
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { useVideoStore } from '../../store/useVideoStore';
@@ -31,7 +33,7 @@ import templatesData from '../../data/templates.json';
 import { formatTime, formatTimeWithMs } from '../../utils/timeFormat';
 import { formatCasing } from '../../utils/styleHelper';
 
-type LibraryTab = 'media' | 'captions' | 'text' | 'audio' | 'broll' | 'shorts';
+type LibraryTab = 'youtube' | 'media' | 'captions' | 'text' | 'audio' | 'broll' | 'shorts';
 
 const TEMPLATE_CATEGORIES = ["All", "Viral Shorts", "Neon & Gaming", "Documentary & Clean", "Karaoke Sweep", "Urdu"];
 
@@ -139,6 +141,88 @@ export const MediaLibraryPanel: React.FC = () => {
   const [pexelsKey, setPexelsKey] = useState(() => localStorage.getItem('opencaption_pexels_key') || '');
   const [showKeyInput, setShowKeyInput] = useState(false);
 
+  // YouTube import state
+  const [ytUrl, setYtUrl] = useState('');
+  const [ytQuality, setYtQuality] = useState('1080');
+  const [ytInfo, setYtInfo] = useState<{ title: string; duration: number; thumbnail?: string; uploader?: string } | null>(null);
+  const [ytBusy, setYtBusy] = useState<'info' | 'download' | null>(null);
+  const [ytProgress, setYtProgress] = useState(0);
+  const [ytStep, setYtStep] = useState('');
+  const [ytError, setYtError] = useState<string | null>(null);
+
+  const readApiError = async (res: Response, fallback: string) => {
+    try {
+      const data = await res.json();
+      return typeof data.detail === 'string' ? data.detail : fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
+  const handleYoutubeInfo = async () => {
+    if (!ytUrl.trim()) return;
+    setYtBusy('info');
+    setYtError(null);
+    setYtInfo(null);
+    try {
+      const res = await fetch(apiUrl('/api/youtube/info'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: ytUrl.trim() })
+      });
+      if (!res.ok) throw new Error(await readApiError(res, 'Could not read this video'));
+      setYtInfo(await res.json());
+    } catch (e: any) {
+      setYtError(e?.message || 'Could not read this video');
+    } finally {
+      setYtBusy(null);
+    }
+  };
+
+  const handleYoutubeDownload = async () => {
+    if (!ytUrl.trim()) return;
+    setYtBusy('download');
+    setYtError(null);
+    setYtProgress(1);
+    setYtStep('Starting download...');
+    try {
+      const startRes = await fetch(apiUrl('/api/youtube/download'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: ytUrl.trim(), quality: ytQuality })
+      });
+      if (!startRes.ok) throw new Error(await readApiError(startRes, 'Could not start download'));
+      const { task_id } = await startRes.json();
+
+      let videoPath: string | null = null;
+      while (!videoPath) {
+        await new Promise((r) => setTimeout(r, 1000));
+        const progRes = await fetch(apiUrl(`/api/youtube/progress/${task_id}`));
+        if (!progRes.ok) throw new Error('Download task lost');
+        const prog = await progRes.json();
+        setYtProgress(prog.progress ?? 0);
+        setYtStep(prog.step || '');
+        if (prog.status === 'error') throw new Error(prog.error || 'Download failed');
+        if (prog.status === 'completed') videoPath = prog.video_path;
+      }
+
+      setYtStep('Loading video into the editor...');
+      const fileRes = await fetch(apiUrl(`/api/source-video/${encodeURIComponent(videoPath)}`));
+      if (!fileRes.ok) throw new Error('Could not load downloaded video');
+      const blob = await fileRes.blob();
+      const baseName = (ytInfo?.title || 'youtube-video').replace(/[^\w\- .]+/g, ' ').trim().slice(0, 80) || 'youtube-video';
+      const file = new File([blob], `${baseName}.mp4`, { type: 'video/mp4' });
+      setVideo(file, URL.createObjectURL(file), file.name);
+      setActiveTab('captions');
+      setYtProgress(100);
+      setYtStep('Done');
+    } catch (e: any) {
+      setYtError(e?.message || 'Download failed');
+    } finally {
+      setYtBusy(null);
+    }
+  };
+
   const presets = templatesData as SubtitlePreset[];
 
   const filteredPresets = useMemo(() => {
@@ -208,6 +292,18 @@ export const MediaLibraryPanel: React.FC = () => {
       {/* Top macOS Segmented Tab Strip */}
       <div className="h-13 border-b border-white/[0.08] px-2.5 flex items-center bg-zinc-950/40 backdrop-blur-md">
         <div className="flex items-center space-x-1 p-1 bg-zinc-900/80 rounded-xl border border-white/[0.06] w-full overflow-x-auto no-scrollbar shadow-inner">
+          <button
+            onClick={() => setActiveTab('youtube')}
+            className={`flex-1 flex items-center justify-center space-x-1 px-2 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+              activeTab === 'youtube'
+                ? 'bg-zinc-800 text-white shadow-xs ring-1 ring-white/10'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]'
+            }`}
+          >
+            <CirclePlay className="w-3.5 h-3.5 text-red-400" />
+            <span>YouTube</span>
+          </button>
+
           <button
             onClick={() => setActiveTab('captions')}
             className={`flex-1 flex items-center justify-center space-x-1 px-2 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
@@ -288,6 +384,92 @@ export const MediaLibraryPanel: React.FC = () => {
 
       {/* Main Tab Content Area */}
       <div className="flex-1 overflow-y-auto p-3.5 text-zinc-200 space-y-4">
+        {/* ======================= YOUTUBE TAB ======================= */}
+        {activeTab === 'youtube' && (
+          <div className="space-y-3" data-testid="youtube-tab">
+            <div className="flex items-center space-x-2">
+              <CirclePlay className="w-4 h-4 text-red-400" />
+              <h4 className="text-xs font-bold text-white tracking-tight">Import from YouTube</h4>
+            </div>
+            <p className="text-[10px] text-zinc-500 leading-relaxed">
+              Paste a link, download the video and edit it here. Use only videos you own or have permission to use.
+            </p>
+            <input
+              value={ytUrl}
+              onChange={(e) => { setYtUrl(e.target.value); setYtInfo(null); setYtError(null); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleYoutubeInfo(); }}
+              placeholder="https://www.youtube.com/watch?v=..."
+              disabled={ytBusy !== null}
+              className="w-full bg-zinc-950/80 border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition-colors"
+            />
+            <div className="flex items-center space-x-2">
+              <select
+                value={ytQuality}
+                onChange={(e) => setYtQuality(e.target.value)}
+                disabled={ytBusy !== null}
+                className="flex-1 bg-zinc-950/80 border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+              >
+                <option value="360">360p</option>
+                <option value="480">480p</option>
+                <option value="720">720p</option>
+                <option value="1080">1080p</option>
+                <option value="1440">1440p</option>
+                <option value="best">Best available</option>
+              </select>
+              <button
+                onClick={handleYoutubeInfo}
+                disabled={!ytUrl.trim() || ytBusy !== null}
+                className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white border border-white/10 disabled:opacity-50 flex items-center space-x-1"
+              >
+                {ytBusy === 'info' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                <span>Check link</span>
+              </button>
+            </div>
+
+            {ytInfo && (
+              <div className="flex space-x-3 p-2.5 rounded-xl bg-zinc-900/70 border border-white/[0.06]">
+                {ytInfo.thumbnail && (
+                  <img src={ytInfo.thumbnail} alt="" referrerPolicy="no-referrer" className="w-24 h-14 object-cover rounded-lg flex-shrink-0" />
+                )}
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-white line-clamp-2">{ytInfo.title}</div>
+                  <div className="text-[10px] text-zinc-400 mt-0.5">
+                    {ytInfo.uploader ? `${ytInfo.uploader} · ` : ''}{Math.floor(ytInfo.duration / 60)}:{String(ytInfo.duration % 60).padStart(2, '0')}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={handleYoutubeDownload}
+              disabled={!ytUrl.trim() || ytBusy !== null}
+              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-400 hover:to-rose-500 text-white font-semibold text-xs shadow-lg shadow-red-500/20 flex items-center justify-center space-x-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {ytBusy === 'download' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              <span>{ytBusy === 'download' ? 'Downloading...' : 'Download & open in editor'}</span>
+            </button>
+
+            {ytBusy === 'download' && (
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-[10px] text-zinc-400">
+                  <span className="truncate max-w-[240px]">{ytStep}</span>
+                  <span className="font-mono text-cyan-400">{ytProgress}%</span>
+                </div>
+                <div className="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden">
+                  <div className="bg-gradient-to-r from-red-400 to-rose-400 h-1.5 rounded-full transition-all duration-300" style={{ width: `${Math.max(3, ytProgress)}%` }} />
+                </div>
+              </div>
+            )}
+
+            {ytError && (
+              <div className="p-2.5 rounded-xl bg-red-950/40 border border-red-500/40 text-red-300 text-xs flex items-start space-x-1.5">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                <span>{ytError}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ======================= AUTO CAPTIONS TAB ======================= */}
         {activeTab === 'captions' && (
           <div className="space-y-4 animate-fade">
