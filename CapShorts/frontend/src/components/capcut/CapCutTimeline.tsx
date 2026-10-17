@@ -194,6 +194,7 @@ const SubtitleBlock: React.FC<SubtitleBlockProps> = React.memo(({
   return (
     <div
       onClick={(e) => onClick(block, e)}
+      title={block.text}
       style={{
         left: `${leftPx}px`,
         width: `${widthPx}px`,
@@ -256,26 +257,17 @@ const VirtualizedSubtitleTrack: React.FC<VirtualizedSubtitleTrackProps> = React.
   onBlockClick,
   onResizeStart,
 }) => {
-  // Group words into clean phrase blocks (2 to 4 words per block like CapCut Desktop)
+  // One block per word so every word can be selected, edited and resized on the timeline
   const blocks = useMemo(() => {
     if (!transcript || transcript.length === 0) return [];
-    const list: SubtitlePhraseBlock[] = [];
-    const blockSize = 3;
-
-    for (let i = 0; i < transcript.length; i += blockSize) {
-      const slice = transcript.slice(i, i + blockSize);
-      const start = slice[0].start;
-      const end = slice[slice.length - 1].end;
-      list.push({
-        id: slice[0].id,
-        words: slice,
-        start,
-        end: Math.max(end, start + 0.35),
-        text: slice.map(w => w.word).join(' '),
-        hasKeyword: slice.some(w => w.keyword)
-      });
-    }
-    return list;
+    return transcript.map((w): SubtitlePhraseBlock => ({
+      id: w.id,
+      words: [w],
+      start: w.start,
+      end: Math.max(w.end, w.start + 0.05),
+      text: w.word,
+      hasKeyword: w.keyword
+    }));
   }, [transcript]);
 
   // Virtualization window: only render blocks that intersect the visible scroll window

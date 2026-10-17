@@ -149,6 +149,17 @@ interface VideoStoreState {
   loadSampleDemo: () => void;
 }
 
+const withWordIds = (words: any[]): WordToken[] => {
+  const stamp = Date.now();
+  return words.map((w, idx) => ({
+    id: w.id || `w-${idx}-${stamp}`,
+    start: w.start,
+    end: w.end,
+    word: w.word,
+    keyword: Boolean(w.keyword),
+  }));
+};
+
 export const useVideoStore = create<VideoStoreState>((set, get) => ({
   videoFile: null,
   videoUrl: null,
@@ -599,7 +610,7 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
       if (res.ok) {
         const data = await res.json();
         if (data.words && Array.isArray(data.words)) {
-          set({ transcript: data.words });
+          set({ transcript: withWordIds(data.words) });
         }
       }
     } catch (e) {
@@ -621,7 +632,7 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
       const data = await res.json();
       if (!Array.isArray(data.words)) return 0;
       const changed = data.words.filter((w: WordToken, i: number) => transcript[i]?.word !== w.word).length;
-      set({ transcript: data.words });
+      set({ transcript: withWordIds(data.words) });
       return changed;
     } catch (e) {
       console.warn("Glossary error:", e);
@@ -641,7 +652,7 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
       if (!res.ok) return false;
       const data = await res.json();
       if (!Array.isArray(data.words)) return false;
-      set({ transcript: data.words });
+      set({ transcript: withWordIds(data.words) });
       return true;
     } catch (e) {
       console.warn("Align error:", e);
