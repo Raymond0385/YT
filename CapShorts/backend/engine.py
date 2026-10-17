@@ -43,6 +43,7 @@ from clip_generator import detect_viral_clips
 from groq_transcribe import transcribe_with_groq_pool
 from transliterate import transliterate_transcript, transliterate_word
 import youtube_download as yt
+import file_utils as fu
 import asr_quality as aq
 from text_align import align_words, apply_glossary, collapse_repeats, sanitize_words, fix_durations
 from telemetry import telemetry
@@ -146,6 +147,18 @@ else:
     DATA_DIR = BASE_DIR
 os.makedirs(DATA_DIR, exist_ok=True)
 
+# A packaged (windowed) build has no console, so everything printed would be lost: keep a log file instead.
+if getattr(sys, 'frozen', False):
+    try:
+        _log_path = os.path.join(DATA_DIR, "engine.log")
+        if os.path.exists(_log_path) and os.path.getsize(_log_path) > 5 * 1024 * 1024:
+            os.remove(_log_path)
+        _log_file = open(_log_path, "a", encoding="utf-8", buffering=1)
+        sys.stdout = _log_file
+        sys.stderr = _log_file
+    except OSError:
+        pass
+
 TEMP_DIR = os.path.join(DATA_DIR, "temp")
 OUTPUT_DIR = os.path.join(DATA_DIR, "outputs")
 ENV_FILE = os.path.join(DATA_DIR, ".env")
@@ -160,18 +173,10 @@ def get_safe_contained_path(base_dir: str, filename: str) -> str:
     if not filename or not isinstance(filename, str):
         raise HTTPException(status_code=400, detail="Filename cannot be empty")
 
-    raw = filename.strip()
-    if "\x00" in raw or ".." in raw or raw.startswith("/") or raw.startswith("\\") or (len(raw) > 1 and raw[1] == ":"):
+    target = fu.contained_path(base_dir, filename)
+    if target is None:
         raise HTTPException(status_code=400, detail="Path traversal forbidden")
-
-    clean_name = os.path.basename(raw.replace("\\", "/"))
-    if not clean_name or clean_name in (".", "..") or "\x00" in clean_name:
-        raise HTTPException(status_code=400, detail="Invalid filename format")
-    resolved_base = os.path.realpath(base_dir)
-    target_path = os.path.realpath(os.path.join(resolved_base, clean_name))
-    if not (target_path.startswith(resolved_base + os.sep) or target_path == resolved_base):
-        raise HTTPException(status_code=400, detail="Path traversal forbidden")
-    return target_path
+    return target
 
 def verify_loopback_request(request: Request):
     """Ensures caller is strictly local machine loopback."""
@@ -1147,10 +1152,20 @@ def run_export_job(task_id: str, payload: ExportPayload):
             if proc2.returncode != 0:
                 raise RuntimeError("FFmpeg render failed on both hardware and software encoders.")
 
+        saved_to = None
+        save_error = None
+        try:
+            saved_to = fu.copy_to_folder(output_file, current_export_dir(), fu.clean_filename(payload.output_filename or "capshorts_export.mp4"))
+        except Exception as copy_err:
+            print(f"[export] could not copy result to the export folder: {copy_err}")
+            save_error = "Rendered, but could not save to the chosen folder. Use Download instead."
+
         update_task_state(EXPORT_TASKS, task_id, {
             "progress": 100,
             "status": f"Complete! Video rendered using {hw_encoder_name}.",
             "output_path": output_file,
+            "saved_to": saved_to,
+            "save_error": save_error,
             "download_url": f"/api/download/{os.path.basename(output_file)}"
         })
         try:
@@ -1160,6 +1175,8 @@ def run_export_job(task_id: str, payload: ExportPayload):
 
     except Exception as e:
         print(f"[export] Job {task_id} failed: {e}")
+        import traceback
+        print(traceback.format_exc())
         safe_msg = str(e) if isinstance(e, (RuntimeError, ValueError)) else "Video rendering failed during processing or encoding."
         update_task_state(EXPORT_TASKS, task_id, {
             "progress": 100,
@@ -1169,6 +1186,10 @@ def run_export_job(task_id: str, payload: ExportPayload):
     finally:
         EXPORT_SEMAPHORE.release()
         prune_stale_tasks(EXPORT_TASKS)
+        try:
+            housekeeping()
+        except Exception as hk_err:
+            print(f"[export] housekeeping skipped: {hk_err}")
         if ass_path and os.path.exists(ass_path):
             try:
                 os.remove(ass_path)
@@ -1243,6 +1264,36 @@ def youtube_set_settings(payload: YoutubeSettingsPayload):
     with open(APP_SETTINGS_FILE, "w", encoding="utf-8") as f:
         json.dump(settings, f, indent=2)
     return {"download_dir": folder}
+
+def current_export_dir() -> str:
+    """Folder finished exports are copied to: saved setting if valid, else the Downloads folder."""
+    try:
+        return yt.resolve_download_dir(load_app_settings().get("export_dir"))
+    except ValueError:
+        return yt.default_download_dir()
+
+@app.get("/api/export/settings")
+def export_get_settings():
+    return {"export_dir": current_export_dir(), "default_dir": yt.default_download_dir()}
+
+@app.post("/api/export/settings", dependencies=[Depends(verify_loopback_request), Depends(verify_local_origin)])
+def export_set_settings(payload: YoutubeSettingsPayload):
+    """Saves the folder exports are copied to (empty = Downloads folder)."""
+    try:
+        folder = yt.resolve_download_dir(payload.download_dir)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    settings = load_app_settings()
+    settings["export_dir"] = folder
+    with open(APP_SETTINGS_FILE, "w", encoding="utf-8") as f:
+        json.dump(settings, f, indent=2)
+    return {"export_dir": folder}
+
+def housekeeping():
+    """Deletes stale working files so temp/exports do not pile up (only our own prefixed files)."""
+    fu.cleanup_old_files(OUTPUT_DIR, ("export_", "capshorts_subtitles_"), 24 * 3600)
+    fu.cleanup_old_files(TEMP_DIR, ("audio_", "subtitles_", "retry_", "concat_"), 24 * 3600)
+    fu.cleanup_old_files(TEMP_DIR, ("input_",), 7 * 24 * 3600)
 
 def _ffmpeg_dir() -> Optional[str]:
     ffmpeg = get_ffmpeg_bin()
@@ -1962,6 +2013,10 @@ def update_telemetry_settings(payload: Dict[str, Any]):
 
 if __name__ == "__main__":
     import uvicorn
+    try:
+        housekeeping()
+    except Exception as hk_err:
+        print(f"[engine] housekeeping skipped: {hk_err}")
     threading.Thread(target=get_whisper_model, daemon=True).start()
     threading.Thread(target=telemetry.start_heartbeat_loop, daemon=True).start()
     uvicorn.run(app, host="127.0.0.1", port=8000, reload=False, log_config=None)

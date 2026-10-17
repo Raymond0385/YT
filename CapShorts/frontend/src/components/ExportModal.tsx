@@ -95,6 +95,55 @@ export const ExportModal: React.FC = () => {
   const [exportingSubtitle, setExportingSubtitle] = useState<'srt' | 'vtt' | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [exportDir, setExportDir] = useState('');
+  const [exportDirDraft, setExportDirDraft] = useState('');
+  const [exportDirError, setExportDirError] = useState<string | null>(null);
+  const [savedTo, setSavedTo] = useState<string | null>(null);
+  const [saveWarning, setSaveWarning] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isExportModalOpen) return;
+    fetch(apiUrl('/api/export/settings'))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.export_dir) {
+          setExportDir(d.export_dir);
+          setExportDirDraft(d.export_dir);
+        }
+      })
+      .catch(() => { /* engine offline: the field fills once it is reachable */ });
+  }, [isExportModalOpen]);
+
+  const saveExportDir = async (dir: string) => {
+    setExportDirError(null);
+    try {
+      const res = await fetch(apiUrl('/api/export/settings'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ download_dir: dir })
+      });
+      if (!res.ok) {
+        let msg = 'Could not use this folder';
+        try { const d = await res.json(); if (typeof d.detail === 'string') msg = d.detail; } catch { /* keep default */ }
+        throw new Error(msg);
+      }
+      const d = await res.json();
+      setExportDir(d.export_dir);
+      setExportDirDraft(d.export_dir);
+    } catch (e: any) {
+      setExportDirError(e?.message || 'Could not use this folder');
+    }
+  };
+
+  const browseExportDir = async () => {
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const picked = await open({ directory: true, multiple: false, defaultPath: exportDir || undefined });
+      if (typeof picked === 'string') await saveExportDir(picked);
+    } catch {
+      setExportDirError('Folder picker is available in the desktop app. Type the full folder path instead.');
+    }
+  };
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -111,6 +160,13 @@ export const ExportModal: React.FC = () => {
       setExportError(null);
     }
   }, [isExportModalOpen, isExporting]);
+
+  useEffect(() => {
+    if (isExporting) {
+      setSavedTo(null);
+      setSaveWarning(null);
+    }
+  }, [isExporting]);
 
   useEffect(() => {
     if (activeClip) {
@@ -300,6 +356,8 @@ export const ExportModal: React.FC = () => {
               setIsExporting(false);
               const cleanUrl = taskData.download_url ? apiUrl(taskData.download_url) : '#';
               setExportResultUrl(cleanUrl);
+              setSavedTo(taskData.saved_to || null);
+              setSaveWarning(taskData.save_error || null);
             }
           }
         } catch (e: any) {
@@ -407,6 +465,33 @@ export const ExportModal: React.FC = () => {
             </div>
           </div>
 
+          {/* Where the finished video is saved */}
+          <div className="space-y-1.5" data-testid="export-folder">
+            <label className="text-[11px] font-semibold text-zinc-300">Save finished video to</label>
+            <div className="flex items-center space-x-2">
+              <input
+                value={exportDirDraft}
+                onChange={(e) => setExportDirDraft(e.target.value)}
+                onBlur={() => { if (exportDirDraft.trim() && exportDirDraft !== exportDir) saveExportDir(exportDirDraft); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') saveExportDir(exportDirDraft); }}
+                disabled={isExporting}
+                placeholder="C:\Users\you\Videos"
+                className="flex-1 min-w-0 bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+              />
+              <button
+                type="button"
+                onClick={browseExportDir}
+                disabled={isExporting}
+                className="px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white border border-white/10 disabled:opacity-50 flex items-center space-x-1"
+              >
+                <FolderDown className="w-3.5 h-3.5" />
+                <span>Browse</span>
+              </button>
+            </div>
+            <p className="text-[10px] text-zinc-500">Default: your Downloads folder. A copy is also kept internally for one day.</p>
+            {exportDirError && <p className="text-[10px] text-red-400">{exportDirError}</p>}
+          </div>
+
           {/* Real-Time Progress Bar */}
           {isExporting && (
             <div className="p-4 bg-zinc-950/80 border border-indigo-500/30 rounded-xl space-y-2 animate-fade">
@@ -434,6 +519,8 @@ export const ExportModal: React.FC = () => {
                 <div>
                   <p className="font-bold">Render Complete!</p>
                   <p className="text-[10px] text-emerald-300/80">Saved without watermarks or quality loss.</p>
+                  {savedTo && <p className="text-[10px] text-emerald-200 break-all select-text" data-testid="export-saved-to">Saved to: {savedTo}</p>}
+                  {saveWarning && <p className="text-[10px] text-amber-300">{saveWarning}</p>}
                 </div>
               </div>
               {exportResultUrl && (
