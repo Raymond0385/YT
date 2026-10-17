@@ -29,6 +29,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Copy subtitle fonts into the installer resources
+        shell: bash
+        run: |
+          mkdir -p CapShorts/src-tauri/binaries/fonts
+          cp CapShorts/frontend/public/fonts/*.ttf CapShorts/src-tauri/binaries/fonts/
+
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:

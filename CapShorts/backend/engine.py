@@ -159,10 +159,43 @@ if getattr(sys, 'frozen', False):
     except OSError:
         pass
 
+def setup_fontconfig():
+    """
+    FFmpeg's subtitle renderer (libass) finds fonts through fontconfig, and the bundled FFmpeg has no config,
+    so it silently drew every style in a fallback font. Point it at our bundled fonts plus the system fonts.
+    """
+    try:
+        fonts_dirs = []
+        for candidate in (os.path.join(BASE_DIR, "fonts"), os.path.join(MEIPASS_DIR, "fonts"),
+                          os.path.join(BASE_DIR, "..", "frontend", "public", "fonts")):
+            candidate = os.path.normpath(candidate)
+            if os.path.isdir(candidate) and candidate not in fonts_dirs:
+                fonts_dirs.append(candidate)
+        if sys.platform == "win32":
+            fonts_dirs.append(os.path.join(os.environ.get("WINDIR", "C:/Windows"), "Fonts"))
+        elif sys.platform == "darwin":
+            fonts_dirs += ["/System/Library/Fonts", "/Library/Fonts", os.path.expanduser("~/Library/Fonts")]
+        else:
+            fonts_dirs += ["/usr/share/fonts", os.path.expanduser("~/.fonts")]
+        cache_dir = os.path.join(DATA_DIR, "fontcache")
+        os.makedirs(cache_dir, exist_ok=True)
+        dirs_xml = "".join(f"  <dir>{d.replace(chr(92), '/')}</dir>\n" for d in fonts_dirs)
+        conf = (
+            '<?xml version="1.0"?>\n<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n<fontconfig>\n'
+            + dirs_xml + f"  <cachedir>{cache_dir.replace(chr(92), '/')}</cachedir>\n</fontconfig>\n"
+        )
+        conf_path = os.path.join(DATA_DIR, "fonts.conf")
+        with open(conf_path, "w", encoding="utf-8") as f:
+            f.write(conf)
+        os.environ["FONTCONFIG_FILE"] = conf_path
+    except Exception as font_err:
+        print(f"[engine] font setup skipped: {font_err}")
+
 TEMP_DIR = os.path.join(DATA_DIR, "temp")
 OUTPUT_DIR = os.path.join(DATA_DIR, "outputs")
 ENV_FILE = os.path.join(DATA_DIR, ".env")
 os.makedirs(TEMP_DIR, exist_ok=True)
+setup_fontconfig()
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def get_safe_contained_path(base_dir: str, filename: str) -> str:

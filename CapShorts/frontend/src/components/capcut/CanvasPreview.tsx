@@ -105,6 +105,8 @@ export const CanvasPreview: React.FC = () => {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [stageSize, setStageSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   const [isMuted, setIsMuted] = useState(false);
 
   // Active AI Short (if selected)
@@ -311,7 +313,44 @@ export const CanvasPreview: React.FC = () => {
     return brollList.find(b => b.enabled && currentTime >= b.start && currentTime <= b.end);
   }, [brollList, currentTime]);
 
-  // Subtitle positioning CSS
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0]?.contentRect;
+      if (r) setStageSize({ w: r.width, h: r.height });
+    });
+    ro.observe(el);
+    setStageSize({ w: el.clientWidth, h: el.clientHeight });
+    return () => ro.disconnect();
+  }, [videoUrl, aspectRatio, previewZoom]);
+
+  // Same layout numbers as the exported video (backend/subtitle_gen.py compute_layout), as fractions of the
+  // canvas height, so the preview matches the render at any window size.
+  const subtitleLayout = useMemo(() => {
+    const isVertical = aspectRatio === '9:16';
+    const base = Number(activePreset.fontSize) || 48;
+    const outline = Number(activePreset.outlineWidth) || 0;
+    const shadow = Number(activePreset.shadowDepth) || 0;
+    const pos = (activePreset.position || 'bottom-center').toLowerCase();
+    const fontRel = isVertical ? Math.max(44, Math.floor(base * 1.15)) / 1920 : 38 / 720;
+    const outlineRel = outline > 0 ? (isVertical ? Math.max(3, outline) / 1920 : Math.max(2.5, outline * 0.75) / 720) : 0;
+    const shadowRel = shadow > 0 ? (isVertical ? Math.max(2, shadow) / 1920 : Math.max(1.5, shadow * 0.75) / 720) : 0;
+    const bottomPct = isVertical ? 20 : 13;
+    const anchor: 'top' | 'middle' | 'bottom' = pos.includes('top') ? 'top' : (pos.includes('middle') || (pos.includes('center') && !pos.includes('bottom'))) ? 'middle' : 'bottom';
+    return { fontRel, outlineRel, shadowRel, bottomPct, anchor };
+  }, [aspectRatio, activePreset.fontSize, activePreset.outlineWidth, activePreset.shadowDepth, activePreset.position]);
+
+  const stageH = stageSize.h || 640;
+  const subtitleFontPx = subtitleLayout.fontRel * stageH;
+  const subtitleOverlayStyle: React.CSSProperties =
+    subtitleLayout.anchor === 'top'
+      ? { top: '12%' }
+      : subtitleLayout.anchor === 'middle'
+      ? { top: '50%', transform: 'translateY(-50%)' }
+      : { bottom: `${subtitleLayout.bottomPct}%` };
+
+  // Subtitle positioning CSS (kept for reference by older code paths)
   const positionClass = useMemo(() => {
     const pos = activePreset.position || 'bottom-center';
     if (pos.includes('top')) return 'top-[16%]';
@@ -464,6 +503,7 @@ export const CanvasPreview: React.FC = () => {
               height: '100%',
               width: 'auto',
             }}
+            ref={stageRef}
             className="relative bg-black rounded-2xl overflow-hidden shadow-2xl border border-white/[0.08] flex items-center justify-center transition-all duration-150 ring-1 ring-white/5"
           >
             {/* Studio Backdrop for 9:16 Shorts preview */}
@@ -540,25 +580,32 @@ export const CanvasPreview: React.FC = () => {
 
             {/* Subtitle Overlay */}
             {currentBlock && (
-              <div className={`absolute inset-x-0 ${positionClass} z-20 flex flex-col items-center justify-center px-4 pointer-events-none`}>
+              <div
+                className="absolute inset-x-0 z-20 flex flex-col items-center justify-center pointer-events-none"
+                style={{ ...subtitleOverlayStyle, paddingInline: `${stageSize.w * 40 / 1080}px` }}
+              >
                 {/* Submagic Style Floating 3D Animated Emoji */}
                 {activeEmoji && (
                   <div
                     key={`${currentBlock.start}-${activeEmoji}`}
                     className="mb-2 animate-emoji-pop select-none pointer-events-none z-30"
                   >
-                    <span className="text-4xl sm:text-5xl filter drop-shadow-[0_8px_20px_rgba(0,0,0,0.85)] inline-block transform">
+                    <span
+                      className="filter drop-shadow-[0_8px_20px_rgba(0,0,0,0.85)] inline-block transform"
+                      style={{ fontSize: `${(subtitleFontPx * 1.4).toFixed(2)}px`, lineHeight: 1 }}
+                    >
                       {activeEmoji}
                     </span>
                   </div>
                 )}
 
                 <div
-                  className={`flex flex-wrap items-center justify-center gap-1.5 transition-all duration-100 ${
+                  className={`flex flex-wrap items-center justify-center transition-all duration-100 ${
                     activePreset.bgBox ? 'px-3 py-1.5 rounded-lg' : ''
                   }`}
                   style={{
                     backgroundColor: activePreset.bgBox ? activePreset.bgBoxColor : 'transparent',
+                    columnGap: `${subtitleFontPx * 0.28}px`,
                   }}
                 >
                   {currentBlock.words.map((wordObj) => {
@@ -567,12 +614,15 @@ export const CanvasPreview: React.FC = () => {
                     const textColor = isHighlighted ? activePreset.highlightColor : activePreset.primaryColor;
                     const casedWord = formatCasing(wordObj.word, activePreset.textCasing);
 
-                    const outlineStyle = activePreset.outlineWidth > 0
-                      ? `${activePreset.outlineWidth}px ${activePreset.outlineColor}`
+                    // ASS outline grows outward by its width; a CSS stroke is centered, so double it (paint-order keeps the fill on top)
+                    const outlineStyle = subtitleLayout.outlineRel > 0
+                      ? `${(subtitleLayout.outlineRel * stageH * 2).toFixed(2)}px ${activePreset.outlineColor}`
                       : 'none';
 
-                    const shadowStyle = activePreset.shadowDepth > 0
-                      ? `0px ${activePreset.shadowDepth}px ${activePreset.shadowDepth * 2}px ${activePreset.shadowColor}`
+                    // ASS shadow is a hard offset (no blur)
+                    const shadowPx = subtitleLayout.shadowRel * stageH;
+                    const shadowStyle = shadowPx > 0
+                      ? `${shadowPx.toFixed(2)}px ${shadowPx.toFixed(2)}px 0px ${activePreset.shadowColor}`
                       : 'none';
 
                     let animationClass = '';
@@ -585,11 +635,11 @@ export const CanvasPreview: React.FC = () => {
                     return (
                       <span
                         key={wordObj.id}
-                        className={`inline-block font-black tracking-tight leading-none transition-transform ${animationClass}`}
+                        className={`inline-block leading-none transition-transform ${animationClass}`}
                         style={{
                           fontFamily: `${activePreset.fontFamily}, 'Montserrat', 'Noto Nastaliq Urdu', 'Segoe UI', sans-serif`,
-                          fontSize: `${Math.round(activePreset.fontSize * (aspectRatio === '9:16' ? 0.72 : 0.85))}px`,
-                          fontWeight: activePreset.fontWeight,
+                          fontSize: `${subtitleFontPx.toFixed(2)}px`,
+                          fontWeight: activePreset.fontWeight >= 600 ? 700 : 400,
                           color: textColor,
                           WebkitTextStroke: outlineStyle !== 'none' ? outlineStyle : undefined,
                           paintOrder: 'stroke fill',

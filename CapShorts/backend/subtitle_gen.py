@@ -73,6 +73,55 @@ def apply_casing(text: str, casing: str) -> str:
         return text.lower()
     return text
 
+# Fonts the editor preview falls back to when they are not installed (see index.css @font-face local()).
+FONT_ALIASES = {
+    "the bold font": "Impact",
+    "komika axis": "Impact",
+}
+
+
+def resolve_font_family(raw: Any) -> str:
+    name = str(raw or "Montserrat").split(",")[0].strip().strip("'\"") or "Montserrat"
+    return FONT_ALIASES.get(name.lower(), name)
+
+
+def compute_layout(style: Dict[str, Any], video_width: int, video_height: int) -> Dict[str, Any]:
+    """
+    Font size, outline, shadow and margins for the target canvas (ASS units = canvas pixels).
+    The editor preview uses the same numbers expressed relative to the canvas height.
+    """
+    base_font_size = float(style.get("fontSize", 48))
+    outline_width = float(style.get("outlineWidth", 4.0))
+    shadow_depth = float(style.get("shadowDepth", 2.0))
+    position = str(style.get("position", "bottom-center")).lower()
+
+    is_vertical_short = (video_height > video_width)
+    if is_vertical_short:
+        scale_ratio = video_height / 1920.0
+        font_size = max(44, int(base_font_size * 1.15 * scale_ratio))
+        outline = max(3.0, outline_width * scale_ratio)
+        shadow = max(2.0, shadow_depth * scale_ratio)
+        default_bottom_pct = 0.20
+    else:
+        scale_ratio = video_height / 720.0
+        font_size = max(34, int(38.0 * scale_ratio))
+        outline = max(2.5, outline_width * 0.75 * scale_ratio)
+        shadow = max(1.5, shadow_depth * 0.75 * scale_ratio)
+        default_bottom_pct = 0.13
+
+    if "top" in position:
+        alignment, margin_v = 8, int(video_height * 0.12)
+    elif "middle" in position or ("center" in position and "bottom" not in position):
+        alignment, margin_v = 5, 0
+    else:
+        alignment, margin_v = 2, int(video_height * default_bottom_pct)
+
+    return {
+        "font_size": font_size, "outline": outline, "shadow": shadow,
+        "alignment": alignment, "margin_v": margin_v,
+    }
+
+
 def generate_ass_subtitles(
     transcript: List[Dict[str, Any]],
     preset: Dict[str, Any],
@@ -88,7 +137,7 @@ def generate_ass_subtitles(
     if custom_overrides:
         style.update(custom_overrides)
     
-    font_family = str(style.get("fontFamily", "Montserrat")).split(",")[0].strip() or "Montserrat"
+    font_family = resolve_font_family(style.get("fontFamily"))
     
     base_font_size = float(style.get("fontSize", 48))
     font_weight = int(style.get("fontWeight", 900))
@@ -108,35 +157,13 @@ def generate_ass_subtitles(
     position = style.get("position", "bottom-center").lower()
     karaoke_sweep = style.get("karaokeSweep", False)
     
-    # Dynamic proportional font sizing based on target resolution
-    is_vertical_short = (video_height > video_width)
-    if is_vertical_short:
-        # 9:16 Vertical Short (e.g. 1080x1920) - Big, bold viral text
-        scale_ratio = video_height / 1920.0
-        scaled_font_size = max(44, int(base_font_size * 1.15 * scale_ratio))
-        scaled_outline = max(3.0, outline_width * scale_ratio)
-        scaled_shadow = max(2.0, shadow_depth * scale_ratio)
-        default_bottom_pct = 0.20  # Bottom 20% (Alex Hormozi standard)
-    else:
-        # 16:9 Landscape or 1:1 Square (e.g. 1280x720, 1920x1080)
-        scale_ratio = video_height / 720.0
-        scaled_font_size = max(34, int(38.0 * scale_ratio))
-        scaled_outline = max(2.5, outline_width * 0.75 * scale_ratio)
-        scaled_shadow = max(1.5, shadow_depth * 0.75 * scale_ratio)
-        default_bottom_pct = 0.13  # Bottom 13% for widescreen landscape
+    layout = compute_layout(style, video_width, video_height)
+    scaled_font_size = layout["font_size"]
+    scaled_outline = layout["outline"]
+    scaled_shadow = layout["shadow"]
+    alignment = layout["alignment"]
+    margin_v = layout["margin_v"]
 
-    # ASS Alignment: 2 = bottom-center, 5 = middle-center, 8 = top-center
-    if "top" in position:
-        alignment = 8
-        margin_v = int(video_height * 0.12)
-    elif "middle" in position or ("center" in position and "bottom" not in position):
-        alignment = 5
-        margin_v = 0
-    else:
-        # Default: bottom-center
-        alignment = 2
-        margin_v = int(video_height * default_bottom_pct)
-    
     # Border style: 1 = outline + drop shadow, 3 = opaque box
     border_style = 3 if style.get("bgBox", False) else 1
     back_colour = hex_to_ass_color(style.get("bgBoxColor", "#000000"), alpha=120) if border_style == 3 else shadow_color_ass
