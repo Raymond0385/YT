@@ -94,6 +94,7 @@ jobs:
             --hidden-import "transliterate" `
             --hidden-import "telemetry" `
             --hidden-import "text_align" `
+            --hidden-import "asr_quality" `
             --hidden-import "youtube_download" `
             --collect-submodules "yt_dlp" `
             --collect-all "faster_whisper" `
@@ -128,6 +129,7 @@ jobs:
             --hidden-import "transliterate" \
             --hidden-import "telemetry" \
             --hidden-import "text_align" \
+            --hidden-import "asr_quality" \
             --hidden-import "youtube_download" \
             --collect-submodules "yt_dlp" \
             --collect-all "faster_whisper" \
