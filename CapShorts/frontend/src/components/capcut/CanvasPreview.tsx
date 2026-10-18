@@ -23,6 +23,7 @@ import templatesData from '../../data/templates.json';
 import { formatTime, formatTimecode, timelineToSourceTime, sourceToTimelineTime } from '../../utils/timeFormat';
 import { formatCasing } from '../../utils/styleHelper';
 import { getEmojiForWords } from '../../utils/emojiHelper';
+import { ProjectVideoPrompt } from './ProjectVideoPrompt';
 
 export const CanvasPreview: React.FC = () => {
   const {
@@ -105,6 +106,7 @@ export const CanvasPreview: React.FC = () => {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const projectNeedsVideo = useVideoStore((s) => s.projectNeedsVideo);
   const stageRef = useRef<HTMLDivElement>(null);
   const [stageSize, setStageSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
   const [isMuted, setIsMuted] = useState(false);
@@ -654,6 +656,8 @@ export const CanvasPreview: React.FC = () => {
               </div>
             )}
           </div>
+        ) : projectNeedsVideo ? (
+          <ProjectVideoPrompt />
         ) : (
           /* Expansive macOS Studio Import Hero Dropzone */
           <div

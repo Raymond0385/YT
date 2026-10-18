@@ -10,12 +10,15 @@ import {
   Redo2,
   Settings,
   Edit3,
-  Check
+  Check,
+  Save,
+  FolderOpen
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { useVideoStore } from '../../store/useVideoStore';
 import { AspectRatio } from '../../types';
 import { apiUrl } from '../../config';
+import { useProjectActions } from '../../utils/useProjectActions';
 
 export const CapCutHeader: React.FC = () => {
   const {
@@ -43,6 +46,7 @@ export const CapCutHeader: React.FC = () => {
   );
 
   const [hasUpdate, setHasUpdate] = useState(false);
+  const project = useProjectActions();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState(projectTitle);
 
@@ -191,6 +195,52 @@ export const CapCutHeader: React.FC = () => {
 
       {/* Right: Actions & Export Button */}
       <div className="flex items-center space-x-2.5">
+        {/* Project file: open / save */}
+        <div className="flex items-center space-x-1 relative" data-testid="project-actions">
+          <button
+            onClick={() => void project.open()}
+            className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700/80 text-zinc-300 font-medium text-xs border border-white/[0.08] transition-all active:scale-95"
+            title="Open a project file (Ctrl+O)"
+            data-testid="project-open"
+          >
+            <FolderOpen className="w-3 h-3 text-amber-400" />
+            <span className="hidden xl:inline">Open</span>
+          </button>
+          <button
+            onClick={() => void project.save(false)}
+            className="relative flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700/80 text-zinc-300 font-medium text-xs border border-white/[0.08] transition-all active:scale-95"
+            title={`Save project${project.fileName ? ` to ${project.fileName}` : ''} (Ctrl+S)`}
+            data-testid="project-save"
+          >
+            <Save className="w-3 h-3 text-emerald-400" />
+            <span className="hidden xl:inline">Save</span>
+            {project.dirty && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 ring-2 ring-zinc-950" title="Unsaved changes" data-testid="project-dirty" />
+            )}
+          </button>
+          <button
+            onClick={() => void project.saveAs()}
+            className="px-2 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700/80 text-zinc-400 hover:text-zinc-200 text-[11px] border border-white/[0.08] transition-all active:scale-95"
+            title="Save project as... (Shift+Ctrl+S)"
+            data-testid="project-save-as"
+          >
+            <span className="hidden xl:inline">Save as</span>
+            <span className="xl:hidden">As...</span>
+          </button>
+          {project.notice && (
+            <div
+              className={`absolute top-full right-0 mt-2 px-3 py-1.5 rounded-lg text-[11px] font-medium shadow-xl border whitespace-nowrap z-50 ${
+                project.notice.kind === 'error'
+                  ? 'bg-red-950/90 border-red-500/50 text-red-200'
+                  : 'bg-emerald-950/90 border-emerald-500/40 text-emerald-200'
+              }`}
+              data-testid="project-notice"
+            >
+              {project.notice.text}
+            </div>
+          )}
+        </div>
+
         {/* Replace/New Video */}
         {videoFile && (
           <button

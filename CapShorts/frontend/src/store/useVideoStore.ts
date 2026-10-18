@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { apiUrl } from '../config';
 import { clampRange, describeClipRange } from '../utils/clipEdit';
+import { ProjectFile, ProjectVideoRef, videoMatches } from '../utils/projectFile';
 import { WordToken, SubtitlePreset, BrollClip, VideoClip, VideoSegment, AspectRatio, EngineHealth, ExportSettings } from '../types';
 
 interface VideoStoreState {
@@ -68,6 +69,12 @@ interface VideoStoreState {
 
   setClips: (clips: VideoClip[]) => void;
   selectClip: (id: string | null) => void;
+  /** Set while a project is open but its video file has not been chosen yet. */
+  projectNeedsVideo: ProjectVideoRef | null;
+  /** Loads a saved project. Keeps the current video if it is the project's video, otherwise asks for it. */
+  applyProject: (project: ProjectFile) => void;
+  /** Attaches the video file to an opened project without touching its captions, shorts and cuts. */
+  attachProjectVideo: (file: File) => void;
   updateClip: (id: string, changes: { title?: string; start?: number; end?: number }, edge?: 'start' | 'end') => void;
   deleteClip: (id: string) => void;
   addClip: (start: number, end: number, title?: string) => string;
@@ -362,6 +369,7 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
       videoFile: file,
       videoUrl: url,
       videoName: vName,
+      projectNeedsVideo: null,
       serverVideoPath: null,
       isTranscribing: false,
       transcribeProgress: 0,
@@ -395,6 +403,14 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
 
   setDuration: (duration) => {
     const { videoSegments, videoName } = get();
+    if (videoSegments && videoSegments.length === 1) {
+      const only = videoSegments[0];
+      const unchanged = Math.abs(only.end - duration) < 0.05 && Math.abs(only.sourceEnd - duration) < 0.05 && only.start === 0 && only.sourceStart === 0;
+      if (unchanged) {
+        if (get().duration !== duration) set({ duration });
+        return;
+      }
+    }
     if (!videoSegments || videoSegments.length <= 1) {
       set({
         duration,
@@ -496,6 +512,72 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
   }),
 
   setClips: (clips) => set({ clips }),
+  projectNeedsVideo: null,
+  applyProject: (project) => {
+    const { videoFile, videoUrl } = get();
+    const keepVideo = Boolean(videoFile && videoMatches(project.video, videoFile));
+    if (!keepVideo && videoUrl && videoUrl.startsWith('blob:')) {
+      try { URL.revokeObjectURL(videoUrl); } catch { /* ignore */ }
+    }
+    const segments = project.videoSegments.length
+      ? project.videoSegments
+      : [{
+          id: 'seg-1', name: project.video.name || 'Video', start: 0, end: project.video.duration || 10,
+          sourceStart: 0, sourceEnd: project.video.duration || 10, duration: project.video.duration || 10,
+        }];
+    set((state) => ({
+      projectTitle: project.title,
+      aspectRatio: project.aspectRatio,
+      transcript: project.transcript,
+      clips: project.clips,
+      selectedClipId: null,
+      videoSegments: segments,
+      activeTemplateId: project.activeTemplateId || state.activeTemplateId,
+      customStyleOverrides: project.customStyleOverrides,
+      brollList: project.brollList,
+      videoVolume: project.videoVolume,
+      videoSpeed: project.videoSpeed,
+      videoScale: project.videoScale,
+      videoPosition: project.videoPosition,
+      videoFitMode: project.videoFitMode,
+      showEmojis: project.showEmojis,
+      selectedLanguage: project.selectedLanguage,
+      selectedModel: project.selectedModel,
+      glossary: project.glossary,
+      exportSettings: { ...state.exportSettings, ...project.exportSettings },
+      duration: project.video.duration || state.duration,
+      currentTime: 0,
+      isPlaying: false,
+      serverVideoPath: null,
+      isTranscribing: false,
+      transcribeError: null,
+      isExporting: false,
+      exportResultUrl: null,
+      exportProgress: 0,
+      exportStatus: 'Idle',
+      silenceRegions: [],
+      removedSilenceDuration: 0,
+      silenceBackup: null,
+      selectedTimelineItemId: null,
+      selectedTimelineItemType: null,
+      ...(keepVideo
+        ? { projectNeedsVideo: null }
+        : { videoFile: null, videoUrl: null, videoName: project.video.name, projectNeedsVideo: project.video }),
+    }));
+  },
+  attachProjectVideo: (file) => {
+    const prev = get().videoUrl;
+    if (prev && prev.startsWith('blob:')) {
+      try { URL.revokeObjectURL(prev); } catch { /* ignore */ }
+    }
+    set({
+      videoFile: file,
+      videoUrl: URL.createObjectURL(file),
+      videoName: file.name,
+      projectNeedsVideo: null,
+      serverVideoPath: null,
+    });
+  },
   updateClip: (id, changes, edge = 'end') => set((state) => {
     const clips = state.clips.map((c) => {
       if (c.id !== id) return c;
