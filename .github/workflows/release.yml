@@ -36,6 +36,7 @@ jobs:
           cp CapShorts/frontend/public/fonts/*.ttf CapShorts/src-tauri/binaries/fonts/
           mkdir -p CapShorts/src-tauri/binaries/emoji
           cp CapShorts/backend/emoji/* CapShorts/src-tauri/binaries/emoji/
+          cp CapShorts/frontend/src/data/animations.json CapShorts/src-tauri/binaries/animations.json
 
       - name: Download QuickJS (JavaScript engine used to read YouTube)
         shell: bash

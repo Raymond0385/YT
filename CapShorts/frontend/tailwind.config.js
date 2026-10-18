@@ -1,3 +1,21 @@
+import { readFileSync } from 'node:fs';
+
+// The word animations (pop / bounce / fade) come from src/data/animations.json, the same file the exported
+// video is generated from (backend/animation_specs.py), so preview and render play the same motion.
+const animationSpecs = JSON.parse(readFileSync(new URL('./src/data/animations.json', import.meta.url), 'utf-8'));
+
+const fmt = (n) => String(Math.round(n * 1000) / 1000);
+const wordKeyframes = {};
+const wordAnimations = {};
+for (const [name, spec] of Object.entries(animationSpecs)) {
+  if (!spec || !Array.isArray(spec.keyframes)) continue;
+  wordKeyframes[name] = Object.fromEntries(
+    spec.keyframes.map((k) => [`${fmt(k.at * 100)}%`, { transform: `scale(${fmt(k.scaleX)}, ${fmt(k.scaleY)})`, opacity: fmt(k.opacity) }])
+  );
+  // linear between keyframes: libass interpolates linearly too
+  wordAnimations[name] = `${name} ${spec.durationMs}ms linear forwards`;
+}
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -39,29 +57,15 @@ export default {
         'xs': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
       },
       keyframes: {
-        pop: {
-          '0%': { transform: 'scale(0.85)', opacity: '0.8' },
-          '50%': { transform: 'scale(1.18)', opacity: '1' },
-          '100%': { transform: 'scale(1.0)', opacity: '1' }
-        },
-        bounce: {
-          '0%, 100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-12px)' }
-        },
+        ...wordKeyframes,
         glow: {
           '0%, 100%': { filter: 'drop-shadow(0 0 10px currentColor)' },
           '50%': { filter: 'drop-shadow(0 0 25px currentColor)' }
-        },
-        fade: {
-          '0%': { opacity: '0' },
-          '100%': { opacity: '1' }
         }
       },
       animation: {
-        pop: 'pop 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
-        bounce: 'bounce 0.22s ease-in-out forwards',
-        glow: 'glow 1.5s ease-in-out infinite',
-        fade: 'fade 0.2s ease-in-out forwards'
+        ...wordAnimations,
+        glow: 'glow 1.5s ease-in-out infinite'
       }
     },
   },

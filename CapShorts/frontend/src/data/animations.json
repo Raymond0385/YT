@@ -1,0 +1,29 @@
+{
+  "_note": "Single source for the word animations. The editor preview (tailwind.config.js) and the exported video (backend/animation_specs.py, ASS tags) are both generated from this file, so they play the same motion. Values are linear between keyframes; 'at' is the fraction of durationMs.",
+  "pop": {
+    "durationMs": 180,
+    "origin": "center",
+    "keyframes": [
+      { "at": 0, "scaleX": 0.9, "scaleY": 0.9, "opacity": 0.85 },
+      { "at": 0.5, "scaleX": 1.15, "scaleY": 1.15, "opacity": 1 },
+      { "at": 1, "scaleX": 1, "scaleY": 1, "opacity": 1 }
+    ]
+  },
+  "bounce": {
+    "durationMs": 220,
+    "origin": "bottom",
+    "keyframes": [
+      { "at": 0, "scaleX": 1, "scaleY": 1, "opacity": 1 },
+      { "at": 0.5, "scaleX": 1, "scaleY": 1.25, "opacity": 1 },
+      { "at": 1, "scaleX": 1, "scaleY": 1, "opacity": 1 }
+    ]
+  },
+  "fade": {
+    "durationMs": 200,
+    "origin": "center",
+    "keyframes": [
+      { "at": 0, "scaleX": 1, "scaleY": 1, "opacity": 0 },
+      { "at": 1, "scaleX": 1, "scaleY": 1, "opacity": 1 }
+    ]
+  }
+}

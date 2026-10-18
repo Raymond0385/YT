@@ -8,6 +8,8 @@ import math
 import re
 from typing import List, Dict, Any, Optional
 
+from animation_specs import animation_tags
+
 _CSS_RGB = re.compile(
     r"^\s*rgba?\(\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*[, ]\s*(\d{1,3})\s*(?:[,/]\s*([0-9.]+%?)\s*)?\)\s*$", re.I)
 
@@ -281,16 +283,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 start_str = format_ass_time(sub_start)
                 end_str = format_ass_time(sub_end)
                 
-                anim_tag = ""
-                if animation == "pop":
-                    # Scale pop: 100% -> 120% -> 100%
-                    anim_tag = r"{\t(0,70,\fscx120\fscy120)\t(70,140,\fscx100\fscy100)}"
-                elif animation == "bounce":
-                    # Vertical bounce
-                    anim_tag = r"{\t(0,60,\fscy128)\t(60,130,\fscy100)}"
-                elif animation == "fade":
-                    anim_tag = r"{\fad(60,60)}"
-                
+                # Same motion as the editor preview: one spec shared by both (animation_specs.py)
+                anim_tag = animation_tags(animation)
+
                 # Format all words in the block, highlighting the active target_word
                 line_parts = []
                 for w_idx, w in enumerate(block):
@@ -299,7 +294,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     is_kw = bool(w.get("keyword", False))
                     
                     if is_active:
-                        line_parts.append(f"{{\\c{highlight_color_ass}}}{anim_tag}{cased_w}{{\\c{primary_color_ass}}}")
+                        # \r resets the style after the word, so the animation does not carry over to the words after it
+                        line_parts.append(f"{{\\c{highlight_color_ass}}}{anim_tag}{cased_w}{{\\r}}")
                     elif is_kw:
                         line_parts.append(f"{{\\c{highlight_color_ass}}}{cased_w}{{\\c{primary_color_ass}}}")
                     else:
