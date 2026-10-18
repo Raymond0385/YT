@@ -31,6 +31,26 @@ export function currentProjectFileName(): string | null {
   return currentHandle?.name ?? null;
 }
 
+/** The handle of the current project file, to store it in the recent list. */
+export function currentProjectHandle(): unknown {
+  return currentHandle;
+}
+
+/**
+ * Reopens a file from a remembered handle. The browser asks for permission again once per session.
+ * Returns null if the permission was refused.
+ */
+export async function openProjectFromHandle(handle: unknown): Promise<{ text: string; name: string } | null> {
+  const h = handle as FileHandle & { requestPermission?: (o: { mode: string }) => Promise<string> };
+  if (typeof h.requestPermission === 'function') {
+    const state = await h.requestPermission({ mode: 'readwrite' });
+    if (state !== 'granted') return null;
+  }
+  const file = await h.getFile();
+  currentHandle = h;
+  return { text: await file.text(), name: file.name };
+}
+
 const isAbort = (e: unknown) => e instanceof DOMException && e.name === 'AbortError';
 
 /**

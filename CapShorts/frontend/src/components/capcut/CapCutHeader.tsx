@@ -12,7 +12,10 @@ import {
   Edit3,
   Check,
   Save,
-  FolderOpen
+  FolderOpen,
+  ChevronDown,
+  History,
+  RotateCcw
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { useVideoStore } from '../../store/useVideoStore';
@@ -21,6 +24,7 @@ import { apiUrl } from '../../config';
 import { useProjectActions } from '../../utils/useProjectActions';
 import { useHistoryState } from '../../utils/useHistoryState';
 import { history } from '../../store/useVideoStore';
+import { timeAgo } from '../../utils/recents';
 
 export const CapCutHeader: React.FC = () => {
   const {
@@ -50,6 +54,17 @@ export const CapCutHeader: React.FC = () => {
   const [hasUpdate, setHasUpdate] = useState(false);
   const project = useProjectActions();
   const { canUndo, canRedo } = useHistoryState();
+  const [recentOpen, setRecentOpen] = useState(false);
+
+  // close the recent list when clicking elsewhere
+  useEffect(() => {
+    if (!recentOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement)?.closest?.('[data-testid=recent-wrap]')) setRecentOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [recentOpen]);
 
   // Ctrl+Z undo, Ctrl+Y / Shift+Ctrl+Z redo. Inside text fields the browser's own undo keeps working.
   useEffect(() => {
@@ -223,15 +238,62 @@ export const CapCutHeader: React.FC = () => {
       <div className="flex items-center space-x-2.5">
         {/* Project file: open / save */}
         <div className="flex items-center space-x-1 relative" data-testid="project-actions">
-          <button
-            onClick={() => void project.open()}
-            className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700/80 text-zinc-300 font-medium text-xs border border-white/[0.08] transition-all active:scale-95"
-            title="Open a project file (Ctrl+O)"
-            data-testid="project-open"
-          >
-            <FolderOpen className="w-3 h-3 text-amber-400" />
-            <span className="hidden xl:inline">Open</span>
-          </button>
+          <div className="relative flex items-center" data-testid="recent-wrap">
+            <button
+              onClick={() => void project.open()}
+              className="flex items-center space-x-1.5 pl-2.5 pr-2 py-1.5 rounded-l-lg bg-zinc-800/80 hover:bg-zinc-700/80 text-zinc-300 font-medium text-xs border border-white/[0.08] transition-all active:scale-95"
+              title="Open a project file (Ctrl+O)"
+              data-testid="project-open"
+            >
+              <FolderOpen className="w-3 h-3 text-amber-400" />
+              <span className="hidden xl:inline">Open</span>
+            </button>
+            <button
+              onClick={() => setRecentOpen((v) => !v)}
+              className="px-1.5 py-1.5 rounded-r-lg bg-zinc-800/80 hover:bg-zinc-700/80 text-zinc-400 border border-l-0 border-white/[0.08] transition-all"
+              title="Recent projects"
+              data-testid="recent-toggle"
+            >
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            {recentOpen && (
+              <div className="absolute top-full left-0 mt-2 w-72 rounded-xl bg-zinc-900 border border-white/[0.1] shadow-2xl z-50 overflow-hidden" data-testid="recent-menu">
+                <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 flex items-center space-x-1.5 border-b border-white/[0.06]">
+                  <History className="w-3 h-3" />
+                  <span>Recent projects</span>
+                </div>
+                {project.recents.length === 0 ? (
+                  <p className="px-3 py-4 text-xs text-zinc-500" data-testid="recent-empty">Nothing here yet. Saved and opened projects appear in this list.</p>
+                ) : (
+                  <ul className="max-h-64 overflow-y-auto">
+                    {project.recents.map((r) => (
+                      <li key={r.id}>
+                        <button
+                          onClick={() => { setRecentOpen(false); void project.openRecent(r.id); }}
+                          className="w-full text-left px-3 py-2 hover:bg-white/[0.06] transition-colors"
+                          data-testid="recent-item"
+                        >
+                          <span className="block text-xs text-zinc-200 truncate">{r.name}</span>
+                          <span className="block text-[10px] text-zinc-500">
+                            {timeAgo(r.openedAt, Date.now())}{r.handle ? '' : ' - pick the file via Open'}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {project.recents.length > 0 && (
+                  <button
+                    onClick={() => { void project.clearRecents(); }}
+                    className="w-full text-left px-3 py-2 text-[11px] text-zinc-500 hover:text-zinc-300 border-t border-white/[0.06]"
+                    data-testid="recent-clear"
+                  >
+                    Clear list
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
           <button
             onClick={() => void project.save(false)}
             className="relative flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700/80 text-zinc-300 font-medium text-xs border border-white/[0.08] transition-all active:scale-95"
@@ -301,6 +363,19 @@ export const CapCutHeader: React.FC = () => {
           )}
         </button>
       </div>
+      {project.recovery && (
+        <div
+          className="fixed top-16 left-1/2 -translate-x-1/2 z-50 flex items-center space-x-3 px-4 py-2.5 rounded-xl bg-amber-950/95 border border-amber-500/50 text-amber-100 text-xs shadow-2xl"
+          data-testid="recovery-banner"
+        >
+          <RotateCcw className="w-4 h-4 text-amber-300 flex-shrink-0" />
+          <span>
+            Unsaved work was found: <b>{project.recovery.title}</b> ({timeAgo(project.recovery.savedAt, Date.now())})
+          </span>
+          <button onClick={project.restoreDraft} className="px-2.5 py-1 rounded-lg bg-amber-400 text-black font-semibold hover:bg-amber-300" data-testid="recovery-restore">Restore</button>
+          <button onClick={project.discardDraft} className="px-2 py-1 text-amber-200/80 hover:text-white underline" data-testid="recovery-discard">Discard</button>
+        </div>
+      )}
     </header>
   );
 };
