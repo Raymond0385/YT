@@ -8,6 +8,8 @@ import math
 import uuid
 from typing import List, Dict, Any, Optional
 
+from clip_scoring import get_pack, score_candidate, hook_score, detect_language, PACKS, _norm as _norm_token
+
 VIRAL_HOOK_TRIGGERS = {
     # High curiosity / mystery hooks
     "secret", "secrets", "nobody", "never", "truth", "hidden", "mistake", "warning",
@@ -79,17 +81,17 @@ def generate_clip_title(clip_words: List[Any], index: int) -> str:
 
     # Pick dynamic contextual emoji
     lower_phrase = formatted_phrase.lower()
-    if "?" in "".join(words_text[:10]) or any(q in lower_phrase for q in ["why", "how", "what", "kya", "kaise", "kyun"]):
+    if "?" in "".join(words_text[:10]) or any(q in lower_phrase for q in ["why", "how", "what", "kya", "kaise", "kyun", "почему", "зачем", "как ", "что "]):
         emoji = "❓ " if index % 2 == 0 else "🤔 "
         if not formatted_phrase.endswith("?"):
             formatted_phrase += "?"
-    elif any(m in lower_phrase for m in ["mistake", "warning", "stop", "never", "wrong", "galti", "danger"]):
+    elif any(m in lower_phrase for m in ["mistake", "warning", "stop", "never", "wrong", "galti", "danger", "ошибк", "стоп", "никогда", "опасн", "внимание"]):
         emoji = "⚠️ "
         if not formatted_phrase.endswith("!"):
             formatted_phrase += "!"
-    elif any(c.isdigit() for c in formatted_phrase) or any(m in lower_phrase for m in ["money", "dollar", "earn", "paisa", "paise", "rich", "crore", "lakh"]):
+    elif any(c.isdigit() for c in formatted_phrase) or any(m in lower_phrase for m in ["money", "dollar", "earn", "paisa", "paise", "rich", "crore", "lakh", "деньг", "доллар", "заработ", "богат", "миллион", "рубл"]):
         emoji = "💰 " if index % 2 == 0 else "📈 "
-    elif any(s in lower_phrase for s in ["secret", "hack", "trick", "formula", "truth", "hidden", "rule"]):
+    elif any(s in lower_phrase for s in ["secret", "hack", "trick", "formula", "truth", "hidden", "rule", "секрет", "хак", "формул", "правда", "скрыт", "правил"]):
         emoji = "💡 " if index % 2 == 0 else "🔑 "
     else:
         emojis = ["🔥 ", "⚡ ", "🚀 ", "🎯 ", "🎬 "]
@@ -196,6 +198,8 @@ TERMINAL_VERBS_URDU_HINDI = {
     "hoon", "hu"
 }
 
+DANGLING_CONNECTORS = DANGLING_CONNECTORS | PACKS["ru"]["dangling"]
+
 def get_w_word(w: Any) -> str:
     """Safely extracts the word text regardless of dict or object format."""
     if isinstance(w, dict):
@@ -221,35 +225,36 @@ def clean_word(word_str: str) -> str:
     """Strips punctuation and whitespace for grammatical inspection."""
     return str(word_str).strip().lower().strip(".,!?:;\"'()[]{}؟।")
 
-def is_thought_ender(w_obj: Any, next_w_obj: Optional[Any]) -> bool:
+def is_thought_ender(w_obj: Any, next_w_obj: Optional[Any], pack: Optional[Dict[str, Any]] = None) -> bool:
     """
     Evaluates whether a word represents a definitive, complete thought/sentence ending.
-    Guarantees the short does NOT cut off abruptly mid-clause.
+    Guarantees the short does NOT cut off abruptly mid-clause. `pack` is the language pack (English by default).
     """
+    pack = pack or PACKS["en"]
     raw_word = get_w_word(w_obj)
-    c = clean_word(raw_word)
+    c = _norm_token(raw_word)
 
     if not c:
         return False
 
     # Clause continuing punctuation (commas, semicolons, dashes) -> NEVER complete
-    if any(raw_word.endswith(p) for p in [",", ";", ":", "-", "—"]):
+    if any(raw_word.endswith(p) for p in [",", ";", ":", "-", "\u2014", "\u2013"]):
         return False
 
-    # Dangling connectors (and, aur, because, that, toh, etc.) -> NEVER complete
-    if c in DANGLING_CONNECTORS:
+    # Dangling connectors (and, aur, because, that, toh, и, но, что, чтобы ...) -> NEVER complete
+    if c in pack["dangling"]:
         return False
 
     # Conjunctive participles in Roman Urdu/Hindi (dekhke, karke, bolke) -> NEVER complete
-    if (c.endswith("ke") or c.endswith("kay") or c.endswith("kar")) and len(c) > 3:
+    if pack["lang"] == "en" and (c.endswith("ke") or c.endswith("kay") or c.endswith("kar")) and len(c) > 3:
         return False
 
     # 1. Definitive terminal punctuation
-    if any(p in raw_word for p in [".", "!", "?", "।", "؟"]):
+    if any(p in raw_word for p in [".", "!", "?", "\u0964", "\u061f", "\u2026"]):
         return True
 
     # 2. Terminal Urdu/Hindi auxiliary verbs (hai, tha, gaya, chahiye, hoon, etc.)
-    if c in TERMINAL_VERBS_URDU_HINDI:
+    if c in pack["terminal_verbs"]:
         if next_w_obj is None:
             return True
         pause = get_w_start(next_w_obj) - get_w_end(w_obj)
@@ -266,31 +271,9 @@ def is_thought_ender(w_obj: Any, next_w_obj: Optional[Any]) -> bool:
 
     return False
 
-def score_hook(sentence_words: List[Any]) -> float:
-    """Calculates curiosity and virality hook score (0 to 100) for the opening 5-10 seconds."""
-    if not sentence_words:
-        return 50.0
-
-    score = 50.0
-    text = " ".join(clean_word(get_w_word(w)) for w in sentence_words)
-
-    # Question hooks ("why", "how", "what if", "?")
-    if any(q in text for q in ["why", "how", "what", "did you know", "is it possible", "kya", "kaise", "kyun"]):
-        score += 20.0
-    if any("?" in get_w_word(w) for w in sentence_words):
-        score += 15.0
-
-    # Viral trigger words
-    for w in sentence_words:
-        clean = clean_word(get_w_word(w))
-        if clean in VIRAL_HOOK_TRIGGERS:
-            score += 10.0
-
-    # Numbers and metrics (e.g. 10x, 100, 99%, 5 hour)
-    if any(any(c.isdigit() for c in get_w_word(w)) for w in sentence_words):
-        score += 10.0
-
-    return min(100.0, score)
+def score_hook(sentence_words: List[Any], pack: Optional[Dict[str, Any]] = None) -> float:
+    """Curiosity and virality hook score (0 to 100) for the opening 5-10 seconds."""
+    return hook_score(sentence_words, pack or PACKS["en"])
 
 MAX_TRANSCRIPT_WORDS = 15000
 
@@ -326,14 +309,16 @@ def detect_viral_clips(
             "transcript_snippet": " ".join(get_w_word(w) for w in words[:25]) + ("..." if len(words) > 25 else "")
         }]
 
+    pack = get_pack(words)
+
     # Step 1: Detect valid start positions (sentence beginnings)
     valid_starts = [0]
     for i in range(len(words) - 1):
         w = words[i]
         next_w = words[i + 1]
-        if is_thought_ender(w, next_w):
+        if is_thought_ender(w, next_w, pack):
             # The next word is a clean start point if it isn't a dangling connector
-            if clean_word(get_w_word(next_w)) not in DANGLING_CONNECTORS:
+            if _norm_token(get_w_word(next_w)) not in pack["dangling"]:
                 valid_starts.append(i + 1)
 
     # Step 2: Build candidate clip windows ending strictly on complete thoughts
@@ -352,7 +337,7 @@ def detect_viral_clips(
 
             if raw_dur >= min_clip_duration:
                 # STRICT Thought Completion check
-                if is_thought_ender(w_end, next_w):
+                if is_thought_ender(w_end, next_w, pack):
                     # Acoustic decay padding so speech reverb doesn't get abruptly cut
                     padding = 0.35
                     if next_w:
@@ -363,22 +348,14 @@ def detect_viral_clips(
 
                     c_words = words[start_idx : end_idx + 1]
                     hook = c_words[:10]
-                    h_score = score_hook(hook)
 
-                    # Keyword density score
-                    kw_count = sum(1 for w in c_words if w.get("keyword"))
-                    kw_score = min(28.0, (kw_count / max(1, len(c_words))) * 140.0)
+                    raw_end = get_w_word(w_end)
+                    has_punct = any(p in raw_end for p in [".", "!", "?", "\u0964", "\u061f", "\u2026"])
+                    has_terminal_verb = _norm_token(raw_end) in pack["terminal_verbs"]
+                    end_gap = (get_w_start(next_w) - get_w_end(w_end)) if next_w else 99.0
 
-                    # Speech pacing score (optimal 130-180 WPM)
-                    wpm = (len(c_words) / max(0.1, actual_dur)) * 60.0
-                    pacing_score = 18.0 if 120 <= wpm <= 190 else 8.0
-
-                    # Bonus for crisp terminal punctuation
-                    raw_end = str(w_end.get("word", ""))
-                    has_punct = any(p in raw_end for p in [".", "!", "?", "।", "؟"])
-                    punct_bonus = 12.0 if has_punct else (8.0 if clean_word(raw_end) in TERMINAL_VERBS_URDU_HINDI else 4.0)
-
-                    total_virality = min(99, max(1, int(round((h_score * 0.42) + kw_score + pacing_score + punct_bonus + 10.0))))
+                    total_virality, breakdown = score_candidate(
+                        c_words, start_time, actual_end, end_gap, has_punct, has_terminal_verb, pack)
 
                     candidates.append({
                         "start": round(start_time, 2),
@@ -386,7 +363,8 @@ def detect_viral_clips(
                         "duration": actual_dur,
                         "words": c_words,
                         "hook_words": hook,
-                        "virality_score": total_virality
+                        "virality_score": total_virality,
+                        "score_breakdown": breakdown
                     })
 
     # Fallback if transcript has zero pauses or punctuation
@@ -395,7 +373,7 @@ def detect_viral_clips(
         t = 0.0
         while t + min_clip_duration <= total_duration:
             t_end = min(total_duration, t + step)
-            c_words = [w for w in words if t <= w["start"] <= t_end]
+            c_words = [w for w in words if t <= get_w_start(w) <= t_end]
             if c_words:
                 candidates.append({
                     "start": round(t, 2),
@@ -449,6 +427,8 @@ def detect_viral_clips(
             "virality_score": c["virality_score"],
             "keywords": keywords,
             "transcript_snippet": snippet,
+            "language": pack["lang"],
+            "score_breakdown": c.get("score_breakdown", {}),
             "words": c_words
         })
 

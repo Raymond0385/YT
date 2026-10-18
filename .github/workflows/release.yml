@@ -106,6 +106,7 @@ jobs:
             --hidden-import "engine" `
             --hidden-import "broll" `
             --hidden-import "clip_generator" `
+            --hidden-import "clip_scoring" `
             --hidden-import "groq_transcribe" `
             --hidden-import "subtitle_gen" `
             --hidden-import "transliterate" `
@@ -143,6 +144,7 @@ jobs:
             --hidden-import "engine" \
             --hidden-import "broll" \
             --hidden-import "clip_generator" \
+            --hidden-import "clip_scoring" \
             --hidden-import "groq_transcribe" \
             --hidden-import "subtitle_gen" \
             --hidden-import "transliterate" \
