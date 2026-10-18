@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { apiUrl } from '../config';
 import { clampRange, describeClipRange } from '../utils/clipEdit';
+import { createHistory } from '../utils/history';
 import { ProjectFile, ProjectVideoRef, videoMatches } from '../utils/projectFile';
 import { WordToken, SubtitlePreset, BrollClip, VideoClip, VideoSegment, AspectRatio, EngineHealth, ExportSettings } from '../types';
 
@@ -421,6 +422,7 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
         duration: curDur
       }]
     });
+    history.clear();
   },
 
   setDuration: (duration) => {
@@ -429,12 +431,12 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
       const only = videoSegments[0];
       const unchanged = Math.abs(only.end - duration) < 0.05 && Math.abs(only.sourceEnd - duration) < 0.05 && only.start === 0 && only.sourceStart === 0;
       if (unchanged) {
-        if (get().duration !== duration) set({ duration });
+        if (get().duration !== duration) history.withoutRecording(() => set({ duration }));
         return;
       }
     }
     if (!videoSegments || videoSegments.length <= 1) {
-      set({
+      history.withoutRecording(() => set({
         duration,
         videoSegments: [{
           id: videoSegments?.[0]?.id || 'seg-1',
@@ -445,9 +447,9 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
           sourceEnd: duration,
           duration: duration
         }]
-      });
+      }));
     } else {
-      set({ duration });
+      history.withoutRecording(() => set({ duration }));
     }
   },
 
@@ -550,6 +552,7 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
           sourceStart: 0, sourceEnd: project.video.duration || 10, duration: project.video.duration || 10,
         }];
     persistLocalSettings(project);
+    history.clear();
     set((state) => ({
       projectTitle: project.title,
       aspectRatio: project.aspectRatio,
@@ -1222,3 +1225,21 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
     }
   }
 }));
+
+/**
+ * Undo / redo for everything that makes up the edit (captions, shorts, cuts, style, B-roll, video settings).
+ * View state (playhead, zoom, tabs) is deliberately not part of it.
+ */
+export const history = createHistory<VideoStoreState>({
+  getState: () => useVideoStore.getState(),
+  setState: (partial) => useVideoStore.setState(partial),
+  subscribe: (listener) => useVideoStore.subscribe(listener),
+  keys: [
+    'projectTitle', 'transcript', 'clips', 'videoSegments', 'activeTemplateId', 'customStyleOverrides',
+    'brollList', 'aspectRatio', 'videoVolume', 'videoSpeed', 'videoScale', 'videoPosition', 'videoFitMode',
+    'showEmojis', 'silenceRegions', 'removedSilenceDuration', 'silenceBackup',
+  ],
+  passiveKeys: ['duration'],
+  quietMs: 500,
+  limit: 100,
+});

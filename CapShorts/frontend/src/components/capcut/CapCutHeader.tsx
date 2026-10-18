@@ -19,6 +19,8 @@ import { useVideoStore } from '../../store/useVideoStore';
 import { AspectRatio } from '../../types';
 import { apiUrl } from '../../config';
 import { useProjectActions } from '../../utils/useProjectActions';
+import { useHistoryState } from '../../utils/useHistoryState';
+import { history } from '../../store/useVideoStore';
 
 export const CapCutHeader: React.FC = () => {
   const {
@@ -47,6 +49,26 @@ export const CapCutHeader: React.FC = () => {
 
   const [hasUpdate, setHasUpdate] = useState(false);
   const project = useProjectActions();
+  const { canUndo, canRedo } = useHistoryState();
+
+  // Ctrl+Z undo, Ctrl+Y / Shift+Ctrl+Z redo. Inside text fields the browser's own undo keeps working.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        history.undo();
+      } else if (k === 'y' || (k === 'z' && e.shiftKey)) {
+        e.preventDefault();
+        history.redo();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [tempTitle, setTempTitle] = useState(projectTitle);
 
@@ -135,18 +157,22 @@ export const CapCutHeader: React.FC = () => {
         </div>
 
         {/* Undo / Redo controls */}
-        <div className="flex items-center space-x-0.5 bg-zinc-900/70 border border-white/[0.06] rounded-lg p-0.5 opacity-50 cursor-not-allowed" title="History undo/redo is coming in next release">
+        <div className="flex items-center space-x-0.5 bg-zinc-900/70 border border-white/[0.06] rounded-lg p-0.5">
           <button
-            disabled
-            className="p-1 rounded-md text-zinc-500 cursor-not-allowed"
-            title="Undo (History stack disabled)"
+            onClick={() => history.undo()}
+            disabled={!canUndo}
+            className={`p-1 rounded-md transition-colors ${canUndo ? 'text-zinc-200 hover:bg-white/[0.08]' : 'text-zinc-600 cursor-not-allowed'}`}
+            title="Undo (Ctrl+Z)"
+            data-testid="undo"
           >
             <Undo2 className="w-3.5 h-3.5" />
           </button>
           <button
-            disabled
-            className="p-1 rounded-md text-zinc-500 cursor-not-allowed"
-            title="Redo (History stack disabled)"
+            onClick={() => history.redo()}
+            disabled={!canRedo}
+            className={`p-1 rounded-md transition-colors ${canRedo ? 'text-zinc-200 hover:bg-white/[0.08]' : 'text-zinc-600 cursor-not-allowed'}`}
+            title="Redo (Ctrl+Y)"
+            data-testid="redo"
           >
             <Redo2 className="w-3.5 h-3.5" />
           </button>
