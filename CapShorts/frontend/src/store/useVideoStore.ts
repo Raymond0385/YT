@@ -71,6 +71,9 @@ interface VideoStoreState {
   selectClip: (id: string | null) => void;
   /** Set while a project is open but its video file has not been chosen yet. */
   projectNeedsVideo: ProjectVideoRef | null;
+  /** Active tab of the left panel (Captions, Shorts, ...). Lives in the store so projects can save it. */
+  libraryTab: string;
+  setLibraryTab: (tab: string) => void;
   /** Loads a saved project. Keeps the current video if it is the project's video, otherwise asks for it. */
   applyProject: (project: ProjectFile) => void;
   /** Attaches the video file to an opened project without touching its captions, shorts and cuts. */
@@ -180,6 +183,25 @@ const withWordIds = (words: any[]): WordToken[] => {
     word: w.word,
     keyword: Boolean(w.keyword),
   }));
+};
+
+/** Project glossary sets win over same-named ones; the user's other sets stay. */
+const mergeGlossarySets = (current: { name: string; terms: string }[], incoming: { name: string; terms: string }[]) => {
+  const names = new Set(incoming.map((g) => g.name));
+  return [...current.filter((g) => !names.has(g.name)), ...incoming];
+};
+
+/** Keeps the app-wide settings a project carries (audio cleanup, glossary sets) in sync with localStorage. */
+const persistLocalSettings = (project: ProjectFile) => {
+  try {
+    localStorage.setItem('capshorts.enhanceAudio', project.enhanceAudio ? '1' : '0');
+    localStorage.setItem('capshorts.retryWeak', project.retryWeak ? '1' : '0');
+    if (project.glossarySets.length) {
+      const current = JSON.parse(localStorage.getItem('capshorts.glossarySets') || '[]');
+      localStorage.setItem('capshorts.glossarySets', JSON.stringify(mergeGlossarySets(Array.isArray(current) ? current : [], project.glossarySets)));
+    }
+    localStorage.setItem('capshorts.glossary', project.glossary);
+  } catch { /* storage unavailable */ }
 };
 
 export const useVideoStore = create<VideoStoreState>((set, get) => ({
@@ -513,6 +535,8 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
 
   setClips: (clips) => set({ clips }),
   projectNeedsVideo: null,
+  libraryTab: 'captions',
+  setLibraryTab: (libraryTab) => set({ libraryTab }),
   applyProject: (project) => {
     const { videoFile, videoUrl } = get();
     const keepVideo = Boolean(videoFile && videoMatches(project.video, videoFile));
@@ -525,12 +549,13 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
           id: 'seg-1', name: project.video.name || 'Video', start: 0, end: project.video.duration || 10,
           sourceStart: 0, sourceEnd: project.video.duration || 10, duration: project.video.duration || 10,
         }];
+    persistLocalSettings(project);
     set((state) => ({
       projectTitle: project.title,
       aspectRatio: project.aspectRatio,
       transcript: project.transcript,
       clips: project.clips,
-      selectedClipId: null,
+      selectedClipId: project.view.selectedClipId,
       videoSegments: segments,
       activeTemplateId: project.activeTemplateId || state.activeTemplateId,
       customStyleOverrides: project.customStyleOverrides,
@@ -546,7 +571,19 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
       glossary: project.glossary,
       exportSettings: { ...state.exportSettings, ...project.exportSettings },
       duration: project.video.duration || state.duration,
-      currentTime: 0,
+      glossarySets: mergeGlossarySets(state.glossarySets, project.glossarySets),
+      rangeMode: project.rangeMode,
+      enhanceAudio: project.enhanceAudio,
+      retryWeak: project.retryWeak,
+      currentTime: project.view.currentTime,
+      timelineZoom: project.view.timelineZoom,
+      previewZoom: project.view.previewZoom,
+      safeAreaGuides: project.view.safeAreaGuides,
+      isSnapEnabled: project.view.isSnapEnabled,
+      activeInspectorTab: project.view.activeInspectorTab,
+      activeTab: project.view.activeTab,
+      libraryTab: project.view.libraryTab,
+      isBladeActive: false,
       isPlaying: false,
       serverVideoPath: null,
       isTranscribing: false,
@@ -555,11 +592,11 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
       exportResultUrl: null,
       exportProgress: 0,
       exportStatus: 'Idle',
-      silenceRegions: [],
-      removedSilenceDuration: 0,
-      silenceBackup: null,
-      selectedTimelineItemId: null,
-      selectedTimelineItemType: null,
+      silenceRegions: project.silence.regions,
+      removedSilenceDuration: project.silence.removedDuration,
+      silenceBackup: project.silence.backup,
+      selectedTimelineItemId: project.view.selectedTimelineItemId,
+      selectedTimelineItemType: project.view.selectedTimelineItemType,
       ...(keepVideo
         ? { projectNeedsVideo: null }
         : { videoFile: null, videoUrl: null, videoName: project.video.name, projectNeedsVideo: project.video }),

@@ -145,7 +145,8 @@ export const MediaLibraryPanel: React.FC = () => {
     }))
   );
 
-  const [activeTab, setActiveTab] = useState<LibraryTab>('captions');
+  const activeTab = useVideoStore((s) => s.libraryTab) as LibraryTab;
+  const setActiveTab = useVideoStore((s) => s.setLibraryTab) as (tab: LibraryTab) => void;
 
   // Templates State
   const [selectedCategory, setSelectedCategory] = useState("All");

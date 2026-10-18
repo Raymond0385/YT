@@ -36,7 +36,29 @@ const source = (over: Partial<ProjectSource> = {}): ProjectSource => ({
   selectedLanguage: 'ru',
   selectedModel: 'turbo',
   glossary: 'ChatGPT, Kubernetes',
+  glossarySets: [{ name: 'Tech', terms: 'ChatGPT, Kubernetes' }],
   exportSettings: { resolution: '1080x1920', fps: 30, crf: 20, outputFormat: 'mp4' },
+  rangeMode: 'short_60s',
+  enhanceAudio: false,
+  retryWeak: true,
+  currentTime: 12.5,
+  timelineZoom: 90,
+  previewZoom: '75%',
+  safeAreaGuides: true,
+  isSnapEnabled: false,
+  activeInspectorTab: 'video',
+  activeTab: 'clips',
+  libraryTab: 'shorts',
+  selectedClipId: 'c1',
+  selectedTimelineItemId: 'w2',
+  selectedTimelineItemType: 'subtitle',
+  silenceRegions: [{ start: 3, end: 4.5, duration: 1.5 }],
+  removedSilenceDuration: 2.25,
+  silenceBackup: {
+    transcript: [{ id: 'b1', start: 0, end: 1, word: 'backup', keyword: false, confidence: null }],
+    duration: 70,
+    videoSegments: [{ id: 'seg-0', name: 'talk.mp4', start: 0, end: 70, sourceStart: 0, sourceEnd: 70, duration: 70 }],
+  },
   ...over,
 });
 
@@ -147,5 +169,85 @@ describe('project file', () => {
     expect(projectFileName('')).toBe('project.capshorts');
     expect(projectFileName('   ')).toBe('project.capshorts');
     expect(projectFileName('x'.repeat(200)).length).toBeLessThanOrEqual(80 + '.capshorts'.length);
+  });
+
+  it('round-trips the view, silence data and app settings carried by the project', () => {
+    const res = parseProject(serializeProject(buildProject(source())));
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const p = res.project;
+    expect(p.view).toEqual({
+      currentTime: 12.5, timelineZoom: 90, previewZoom: '75%', safeAreaGuides: true, isSnapEnabled: false,
+      activeInspectorTab: 'video', activeTab: 'clips', libraryTab: 'shorts',
+      selectedClipId: 'c1', selectedTimelineItemId: 'w2', selectedTimelineItemType: 'subtitle',
+    });
+    expect(p.rangeMode).toBe('short_60s');
+    expect(p.enhanceAudio).toBe(false);
+    expect(p.retryWeak).toBe(true);
+    expect(p.glossarySets).toEqual([{ name: 'Tech', terms: 'ChatGPT, Kubernetes' }]);
+    expect(p.silence.regions).toEqual([{ start: 3, end: 4.5, duration: 1.5 }]);
+    expect(p.silence.removedDuration).toBe(2.25);
+    expect(p.silence.backup?.transcript[0].word).toBe('backup');
+    expect(p.silence.backup?.duration).toBe(70);
+    expect(p.silence.backup?.videoSegments).toHaveLength(1);
+  });
+
+  it('opens a file saved before these sections existed, with sensible defaults', () => {
+    const old = JSON.parse(serializeProject(buildProject(source())));
+    for (const k of ['view', 'silence', 'rangeMode', 'enhanceAudio', 'retryWeak', 'glossarySets']) delete old[k];
+    const res = parseProject(JSON.stringify(old));
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const p = res.project;
+    expect(p.view.currentTime).toBe(0);
+    expect(p.view.timelineZoom).toBe(60);
+    expect(p.view.previewZoom).toBe('fit');
+    expect(p.view.libraryTab).toBe('captions');
+    expect(p.view.selectedClipId).toBeNull();
+    expect(p.silence).toEqual({ regions: [], removedDuration: 0, backup: null });
+    expect(p.rangeMode).toBe('full');
+    expect(p.enhanceAudio).toBe(true);
+    expect(p.retryWeak).toBe(false);
+    expect(p.glossarySets).toEqual([]);
+  });
+
+  it('repairs a damaged view section', () => {
+    const base = JSON.parse(serializeProject(buildProject(source())));
+    base.view = {
+      currentTime: -5, timelineZoom: 9999, previewZoom: '300%', activeInspectorTab: 'nope', activeTab: 5,
+      libraryTab: 'hax', selectedClipId: 'does-not-exist', selectedTimelineItemId: 'w1', selectedTimelineItemType: 'wat',
+    };
+    base.silence = { regions: [{ start: 1 }, { start: 1, end: 2 }], backup: 'junk', removedDuration: 'x' };
+    base.rangeMode = 'forever';
+    base.glossarySets = [{ name: '', terms: 'x' }, { name: 'ok', terms: 'a' }, 7];
+    const res = parseProject(JSON.stringify(base));
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const p = res.project;
+    expect(p.view.currentTime).toBe(0);
+    expect(p.view.timelineZoom).toBe(180);
+    expect(p.view.previewZoom).toBe('fit');
+    expect(p.view.activeInspectorTab).toBe('text');
+    expect(p.view.activeTab).toBe('presets');
+    expect(p.view.libraryTab).toBe('captions');
+    expect(p.view.selectedClipId).toBeNull();
+    expect(p.view.selectedTimelineItemId).toBeNull();
+    expect(p.view.selectedTimelineItemType).toBeNull();
+    expect(p.silence.regions).toHaveLength(1);
+    expect(p.silence.backup).toBeNull();
+    expect(p.silence.removedDuration).toBe(0);
+    expect(p.rangeMode).toBe('full');
+    expect(p.glossarySets).toEqual([{ name: 'ok', terms: 'a' }]);
+  });
+
+  it('does not carry transient state, secrets or folders of this computer', () => {
+    const polluted = {
+      ...source(), groqApiKey: 'gsk_x', isPlaying: true, isBladeActive: true,
+      exportDir: 'C:\Users\me\Videos', downloadDir: 'C:\Users\me\Downloads',
+    } as unknown as ProjectSource;
+    const text = serializeProject(buildProject(polluted));
+    for (const needle of ['gsk_x', 'isPlaying', 'isBladeActive', 'exportDir', 'downloadDir', 'Users']) {
+      expect(text).not.toContain(needle);
+    }
   });
 });

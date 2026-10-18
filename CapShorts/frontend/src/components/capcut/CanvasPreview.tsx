@@ -277,6 +277,9 @@ export const CanvasPreview: React.FC = () => {
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
       setDuration(videoRef.current.duration);
+      // A project opened with a saved playhead: put the video at that position too
+      const { currentTime: savedTime, videoSegments: segs } = useVideoStore.getState();
+      if (savedTime > 0) performSeek(timelineToSourceTime(savedTime, segs), false);
     }
   };
 
