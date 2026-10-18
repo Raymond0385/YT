@@ -37,6 +37,8 @@ jobs:
           mkdir -p CapShorts/src-tauri/binaries/emoji
           cp CapShorts/backend/emoji/* CapShorts/src-tauri/binaries/emoji/
           cp CapShorts/frontend/src/data/animations.json CapShorts/src-tauri/binaries/animations.json
+          mkdir -p CapShorts/src-tauri/binaries/face
+          cp CapShorts/backend/face/*.onnx CapShorts/src-tauri/binaries/face/
 
       - name: Download QuickJS (JavaScript engine used to read YouTube)
         shell: bash
@@ -118,6 +120,11 @@ jobs:
             --hidden-import "asr_quality" `
             --hidden-import "file_utils" `
             --hidden-import "youtube_download" `
+            --hidden-import "groq_chunks" `
+            --hidden-import "animation_specs" `
+            --hidden-import "emoji_overlay" `
+            --hidden-import "reframe" `
+            --collect-all "cv2" `
             --collect-submodules "yt_dlp" `
             --collect-all "yt_dlp_ejs" `
             --collect-all "faster_whisper" `
@@ -156,6 +163,11 @@ jobs:
             --hidden-import "asr_quality" \
             --hidden-import "file_utils" \
             --hidden-import "youtube_download" \
+            --hidden-import "groq_chunks" \
+            --hidden-import "animation_specs" \
+            --hidden-import "emoji_overlay" \
+            --hidden-import "reframe" \
+            --collect-all "cv2" \
             --collect-submodules "yt_dlp" \
             --collect-all "yt_dlp_ejs" \
             --collect-all "faster_whisper" \

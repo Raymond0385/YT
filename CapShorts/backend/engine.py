@@ -40,6 +40,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from subtitle_gen import generate_ass_subtitles, generate_srt_subtitles, generate_vtt_subtitles, compute_layout
 import emoji_overlay as eo
 import groq_chunks as gc
+import reframe
 from broll import search_pexels_videos, download_broll_clip, build_ffmpeg_broll_filter
 from clip_generator import detect_viral_clips
 from groq_transcribe import transcribe_with_groq_pool
@@ -1057,6 +1058,9 @@ class ExportPayload(BaseModel):
     aspect_ratio: Optional[str] = "9:16"
     # [{"start": s, "end": e, "emoji": "..."}] in source-video seconds: drawn above the subtitles like in the preview
     emojis: Optional[List[Dict[str, Any]]] = None
+    # How a landscape video is fitted into a vertical frame: "auto" follows the speaker's face (and falls back to a
+    # blurred background when there is no face to follow), "blur" always uses the blurred background.
+    framing: Optional[str] = "auto"
 
     @model_validator(mode="after")
     def validate_clip_range(self):
@@ -1068,6 +1072,7 @@ class ExportPayload(BaseModel):
 def run_export_job(task_id: str, payload: ExportPayload):
     """Background task executing FFmpeg ASS subtitle burning, clip trimming, dynamic scaling, and B-roll composite."""
     ass_path = None
+    reframe_cmd_path = None
     try:
         prune_stale_tasks(EXPORT_TASKS)
         update_task_state(EXPORT_TASKS, task_id, {"progress": 10, "status": "Generating Subtitles (.ass)...", "error": None})
@@ -1172,36 +1177,51 @@ def run_export_job(task_id: str, payload: ExportPayload):
         # Ultra-fast cinematic background blur: downscale to 270x480, single light blur pass, scale to 1080x1920 (16x faster render)
         fast_vert_blur = "[bg]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,boxblur=6:1,scale=1080:1920[bg_b]"
 
-        filter_args = []
-        extra_inputs = []
-        if downloaded_broll:
-            extra_inputs, filter_chains, last_stream = build_ffmpeg_broll_filter(downloaded_broll)
-            if is_vertical_short and is_landscape_input:
-                vert_prep = f"[0:v]split=2[fg][bg];{fast_vert_blur};[fg]scale=1080:1920:force_original_aspect_ratio=decrease[fg_s];[bg_b][fg_s]overlay=(W-w)/2:(H-h)/2[vcomp];"
-                full_filter = f"{vert_prep}{filter_chains.replace('[0:v]', '[vcomp]')};{last_stream}ass='{escaped_ass}'[vfinal]"
-            else:
-                full_filter = f"{filter_chains};{last_stream}ass='{escaped_ass}'[vfinal]"
+        # Fitting a landscape video into the vertical frame: follow the speaker's face, or a blurred background
+        blur_prep = f"[0:v]split=2[fg][bg];{fast_vert_blur};[fg]scale=1080:1920:force_original_aspect_ratio=decrease[fg_s];[bg_b][fg_s]overlay=(W-w)/2:(H-h)/2[vcomp];"
+        follow_prep: Optional[str] = None
+        framing = "none"
+        framing_note: Optional[str] = None
+        reframe_cmd_path: Optional[str] = None
+        if is_vertical_short and is_landscape_input:
+            framing = "blur"
+            if (payload.framing or "auto") != "blur":
+                update_task_state(EXPORT_TASKS, task_id, {"progress": 40, "status": "Finding the speaker..."})
+                span_from = payload.clip_start if is_clip_export else 0.0
+                span_to = payload.clip_end if is_clip_export else probe_media_duration(input_video)
+                plan = reframe.plan_reframe(input_video, span_from, span_to, in_w, in_h)
+                if plan["mode"] == "follow":
+                    reframe_cmd_path = os.path.join(TEMP_DIR, f"reframe_{task_id}.txt")
+                    with open(reframe_cmd_path, "w", encoding="utf-8") as f:
+                        f.write(reframe.sendcmd_text(plan["xs"], plan["rate"]))
+                    follow_prep = reframe.follow_filter(reframe_cmd_path, plan["crop_w"], plan["crop_h"], plan["xs"][0]) + ";"
+                    framing, framing_note = "follow", "Followed the speaker"
+                else:
+                    framing_note = f"Used a blurred background ({plan['reason']})"
+                print(f"[export] framing: {framing} ({plan.get('reason')}, coverage {plan.get('coverage')})")
+                update_task_state(EXPORT_TASKS, task_id, {"progress": 50, "status": "Encoding Video with FFmpeg..."})
 
-            filter_args = [
-                "-filter_complex", full_filter,
-                "-map", "[vfinal]",
-                "-map", "0:a?"
-            ]
-        elif is_vertical_short and is_landscape_input:
-            vert_filter = f"[0:v]split=2[fg][bg];{fast_vert_blur};[fg]scale=1080:1920:force_original_aspect_ratio=decrease[fg_s];[bg_b][fg_s]overlay=(W-w)/2:(H-h)/2[vcomp];[vcomp]ass='{escaped_ass}'[vfinal]"
-            filter_args = [
-                "-filter_complex", vert_filter,
-                "-map", "[vfinal]",
-                "-map", "0:a?"
-            ]
-        else:
-            filter_args = [
-                "-vf", f"ass='{escaped_ass}'"
-            ]
+        def build_filter_args(vert_prep: str):
+            """(extra ffmpeg inputs, filter arguments) for the given vertical-fitting prefix."""
+            extra: List[str] = []
+            if downloaded_broll:
+                extra, filter_chains, last_stream = build_ffmpeg_broll_filter(downloaded_broll)
+                if is_vertical_short and is_landscape_input:
+                    full_filter = f"{vert_prep}{filter_chains.replace('[0:v]', '[vcomp]')};{last_stream}ass='{escaped_ass}'[vfinal]"
+                else:
+                    full_filter = f"{filter_chains};{last_stream}ass='{escaped_ass}'[vfinal]"
+                return extra, ["-filter_complex", full_filter, "-map", "[vfinal]", "-map", "0:a?"]
+            if is_vertical_short and is_landscape_input:
+                return extra, ["-filter_complex", f"{vert_prep}[vcomp]ass='{escaped_ass}'[vfinal]", "-map", "[vfinal]", "-map", "0:a?"]
+            return extra, ["-vf", f"ass='{escaped_ass}'"]
+
+        extra_inputs, filter_args = build_filter_args(follow_prep or blur_prep)
+        blur_filter_args = build_filter_args(blur_prep)[1] if follow_prep else None
 
         # Emoji above the subtitles (libass cannot draw color emoji, so they are images laid over the video)
         plain_filter_args = list(filter_args)
         emoji_inputs: List[str] = []
+        emoji_graph = None
         if payload.emojis:
             try:
                 events = eo.shift_events(
@@ -1219,36 +1239,46 @@ def run_export_job(task_id: str, payload: ExportPayload):
                     emoji_inputs = []
             except Exception as emoji_err:
                 print(f"[export] emoji overlay skipped: {emoji_err}")
-                emoji_inputs, filter_args = [], plain_filter_args
+                emoji_inputs, filter_args, emoji_graph = [], plain_filter_args, None
 
-        base_cmd = [ffmpeg_bin, "-y"] + trim_args + ["-i", input_video] + extra_inputs + emoji_inputs + filter_args
+        def command(inputs: List[str], fargs: List[str]) -> List[str]:
+            return [ffmpeg_bin, "-y"] + trim_args + ["-i", input_video] + extra_inputs + inputs + fargs
+
+        base_cmd = command(emoji_inputs, filter_args)
         cmd = base_cmd + hw_args + ["-c:a", "aac", output_file]
 
-        try:
-            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300, **SUBPROCESS_EXTRA_KWARGS)
-        except subprocess.TimeoutExpired:
-            raise RuntimeError("FFmpeg video render timed out after 300 seconds.")
+        def run_ffmpeg(full_cmd: List[str], what: str) -> subprocess.CompletedProcess:
+            try:
+                return subprocess.run(full_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300, **SUBPROCESS_EXTRA_KWARGS)
+            except subprocess.TimeoutExpired:
+                raise RuntimeError(f"FFmpeg {what} timed out after 300 seconds.")
 
+        proc = run_ffmpeg(cmd, "video render")
         if proc.returncode != 0:
             print(f"[export] FFmpeg error ({hw_encoder_name}): {proc.stderr.decode('utf-8', errors='ignore')}")
             # Fallback to software libx264 if hardware encoder fails during render, retaining all filters & B-roll
             print("[export] Retrying with CPU libx264 fallback...")
             cpu_args = ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "20"]
-            fb_cmd = base_cmd + cpu_args + ["-c:a", "aac", output_file]
-            try:
-                proc2 = subprocess.run(fb_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300, **SUBPROCESS_EXTRA_KWARGS)
-            except subprocess.TimeoutExpired:
-                raise RuntimeError("FFmpeg software fallback timed out after 300 seconds.")
+            proc2 = run_ffmpeg(base_cmd + cpu_args + ["-c:a", "aac", output_file], "software fallback")
 
-            if proc2.returncode != 0 and emoji_inputs:
-                # Never lose the render because of the emoji layer: try once more without it
-                print(f"[export] FFmpeg error with emoji overlay: {proc2.stderr.decode('utf-8', errors='ignore')[-1500:]}")
-                print("[export] Retrying without emoji...")
-                plain_cmd = [ffmpeg_bin, "-y"] + trim_args + ["-i", input_video] + extra_inputs + plain_filter_args
-                try:
-                    proc2 = subprocess.run(plain_cmd + cpu_args + ["-c:a", "aac", output_file], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300, **SUBPROCESS_EXTRA_KWARGS)
-                except subprocess.TimeoutExpired:
-                    raise RuntimeError("FFmpeg software fallback timed out after 300 seconds.")
+            # Never lose the render because of an optional layer: drop emoji, then the face-following crop
+            retries: List[Tuple[str, List[str], List[str], Optional[str]]] = []
+            if emoji_inputs:
+                retries.append(("without emoji", [], plain_filter_args, None))
+            if follow_prep and blur_filter_args is not None:
+                if emoji_graph:
+                    retries.append(("blurred background", emoji_inputs, eo.attach_to_filters(blur_filter_args, emoji_graph),
+                                    "Used a blurred background (following the speaker failed)"))
+                retries.append(("blurred background without emoji", [], blur_filter_args,
+                                "Used a blurred background (following the speaker failed)"))
+            for label, inputs, fargs, note in retries:
+                if proc2.returncode == 0:
+                    break
+                print(f"[export] FFmpeg error: {proc2.stderr.decode('utf-8', errors='ignore')[-1500:]}")
+                print(f"[export] Retrying {label}...")
+                proc2 = run_ffmpeg(command(inputs, fargs) + cpu_args + ["-c:a", "aac", output_file], "software fallback")
+                if proc2.returncode == 0 and note:
+                    framing, framing_note = "blur", note
 
             if proc2.returncode != 0:
                 raise RuntimeError("FFmpeg render failed on both hardware and software encoders.")
@@ -1267,6 +1297,8 @@ def run_export_job(task_id: str, payload: ExportPayload):
             "output_path": output_file,
             "saved_to": saved_to,
             "save_error": save_error,
+            "framing": framing,
+            "framing_note": framing_note,
             "download_url": f"/api/download/{os.path.basename(output_file)}"
         })
         try:
@@ -1291,11 +1323,12 @@ def run_export_job(task_id: str, payload: ExportPayload):
             housekeeping()
         except Exception as hk_err:
             print(f"[export] housekeeping skipped: {hk_err}")
-        if ass_path and os.path.exists(ass_path):
-            try:
-                os.remove(ass_path)
-            except Exception:
-                pass
+        for leftover in (ass_path, reframe_cmd_path):
+            if leftover and os.path.exists(leftover):
+                try:
+                    os.remove(leftover)
+                except Exception:
+                    pass
 
 @app.get("/api/download/{filename}")
 def download_exported_file(filename: str):

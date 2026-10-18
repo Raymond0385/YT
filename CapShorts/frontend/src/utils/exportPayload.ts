@@ -1,6 +1,27 @@
 import { SubtitlePreset, VideoClip, WordToken, BrollClip } from '../types';
 import { buildEmojiEvents } from './emojiEvents';
 
+/** How a landscape video is fitted into a vertical frame: follow the speaker's face, or a blurred background. */
+export type Framing = 'auto' | 'blur';
+
+const FRAMING_KEY = 'kadr.framing';
+
+export function loadFraming(): Framing {
+  try {
+    return localStorage.getItem(FRAMING_KEY) === 'blur' ? 'blur' : 'auto';
+  } catch {
+    return 'auto';
+  }
+}
+
+export function saveFraming(framing: Framing): void {
+  try {
+    localStorage.setItem(FRAMING_KEY, framing);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 export interface ExportPayloadInput {
   videoPath: string | null;
   transcript: WordToken[];
@@ -12,6 +33,7 @@ export interface ExportPayloadInput {
   showEmojis: boolean;
   /** Export only this short; without it the whole video is exported. */
   clip?: Pick<VideoClip, 'start' | 'end'> | null;
+  framing?: Framing;
 }
 
 export function aspectForResolution(resolution: ExportPayloadInput['resolution']): '9:16' | '16:9' | '1:1' {
@@ -29,6 +51,7 @@ export function buildExportPayload(input: ExportPayloadInput): Record<string, un
     output_filename: input.outputFilename,
     resolution: input.resolution,
     aspect_ratio: aspectForResolution(input.resolution),
+    framing: input.framing ?? loadFraming(),
   };
 
   if (input.clip) {

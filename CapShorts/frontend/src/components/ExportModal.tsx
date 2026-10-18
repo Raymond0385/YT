@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Share2, CheckCircle2, Download, Sparkles, FolderDown, Zap, Flame, Loader2, FileText, AlertTriangle, RotateCcw } from 'lucide-react';
 import { useVideoStore } from '../store/useVideoStore';
 import { apiUrl } from '../config';
-import { buildExportPayload } from '../utils/exportPayload';
+import { buildExportPayload, Framing, loadFraming, saveFraming } from '../utils/exportPayload';
 import templatesData from '../data/templates.json';
 import { SubtitlePreset } from '../types';
 
@@ -101,6 +101,8 @@ export const ExportModal: React.FC = () => {
   const [exportDirDraft, setExportDirDraft] = useState('');
   const [exportDirError, setExportDirError] = useState<string | null>(null);
   const [savedTo, setSavedTo] = useState<string | null>(null);
+  const [framing, setFraming] = useState<Framing>(loadFraming);
+  const [framingNote, setFramingNote] = useState<string | null>(null);
   const [saveWarning, setSaveWarning] = useState<string | null>(null);
 
   useEffect(() => {
@@ -167,6 +169,7 @@ export const ExportModal: React.FC = () => {
     if (isExporting) {
       setSavedTo(null);
       setSaveWarning(null);
+      setFramingNote(null);
     }
   }, [isExporting]);
 
@@ -290,6 +293,7 @@ export const ExportModal: React.FC = () => {
         resolution,
         showEmojis,
         clip: activeClip,
+        framing,
       });
 
       const res = await fetch(apiUrl('/api/export'), {
@@ -355,6 +359,7 @@ export const ExportModal: React.FC = () => {
               const cleanUrl = taskData.download_url ? apiUrl(taskData.download_url) : '#';
               setExportResultUrl(cleanUrl);
               setSavedTo(taskData.saved_to || null);
+              setFramingNote(taskData.framing_note || null);
               setSaveWarning(taskData.save_error || null);
             }
           }
@@ -463,6 +468,24 @@ export const ExportModal: React.FC = () => {
             </div>
           </div>
 
+          {/* Landscape -> vertical: follow the speaker or keep the whole picture on a blurred background */}
+          {resolution === '1080x1920' && (
+            <div className="space-y-1.5" data-testid="framing-field">
+              <label className="text-[11px] font-semibold text-zinc-300">Framing of widescreen video</label>
+              <select
+                value={framing}
+                onChange={(e) => { const v = e.target.value as Framing; setFraming(v); saveFraming(v); }}
+                disabled={isExporting}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                data-testid="framing-select"
+              >
+                <option value="auto">Follow the speaker (blurred background if there is no face)</option>
+                <option value="blur">Whole picture on a blurred background</option>
+              </select>
+              <p className="text-[10px] text-zinc-500">The editor preview shows the whole picture; the exported video follows the face.</p>
+            </div>
+          )}
+
           {/* Where the finished video is saved */}
           <div className="space-y-1.5" data-testid="export-folder">
             <label className="text-[11px] font-semibold text-zinc-300">Save finished video to</label>
@@ -518,6 +541,7 @@ export const ExportModal: React.FC = () => {
                   <p className="font-bold">Render Complete!</p>
                   <p className="text-[10px] text-emerald-300/80">Saved without watermarks or quality loss.</p>
                   {savedTo && <p className="text-[10px] text-emerald-200 break-all select-text" data-testid="export-saved-to">Saved to: {savedTo}</p>}
+                  {framingNote && <p className="text-[10px] text-emerald-300/80" data-testid="export-framing-note">{framingNote}</p>}
                   {saveWarning && <p className="text-[10px] text-amber-300">{saveWarning}</p>}
                 </div>
               </div>

@@ -50,6 +50,11 @@ describe('buildExportPayload', () => {
     expect('emojis' in p).toBe(false);
   });
 
+  it('sends the framing choice, following the speaker by default', () => {
+    expect(buildExportPayload({ ...base }).framing).toBe('auto');
+    expect(buildExportPayload({ ...base, framing: 'blur' }).framing).toBe('blur');
+  });
+
   it('keeps only enabled B-roll and maps resolutions to aspect ratios', () => {
     const p = buildExportPayload({ ...base, brollList: [{ id: '1', enabled: true }, { id: '2', enabled: false }] as never });
     expect((p.broll_clips as unknown[]).length).toBe(1);

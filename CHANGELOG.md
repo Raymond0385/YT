@@ -5,6 +5,17 @@ All notable changes to Kadr (formerly CapShorts) are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Auto-reframe: when a widescreen video is exported as a vertical short, the frame follows the speaker's face (YuNet face detector, smooth camera path); falls back to the blurred background when no face is found. Choice in the Export window.
+- "Export all" button: renders every short to the export folder in one go, with progress and an "Open folder" button.
+- Autosave of the project draft, recent projects list and recovery after a crash.
+- Long recordings in cloud (Groq) mode are split at pauses into parts, so the file size limit no longer blocks them.
+
+### Changed
+- Pop / bounce / fade subtitle animations now look the same in the preview and in the rendered video (one shared spec).
+
 ## [1.3.0] - 2026-10-18
 
 The app is now called **Kadr** and has a new icon. Built on the open-source CapShorts by Ali Raza (MIT, see LICENSE).
