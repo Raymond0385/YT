@@ -5,7 +5,7 @@ All notable changes to Kadr (formerly CapShorts) are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.4.0] - 2026-10-18
 
 ### Added
 - Auto-reframe: when a widescreen video is exported as a vertical short, the frame follows the speaker's face (YuNet face detector, smooth camera path); falls back to the blurred background when no face is found. Choice in the Export window.
