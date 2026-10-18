@@ -682,7 +682,8 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
 
   setRangeMode: (rangeMode) => set({ rangeMode }),
 
-  setActiveTemplate: (id) => set({ activeTemplateId: id }),
+  // Picking a preset replaces the look: earlier manual tweaks (font, colors...) would otherwise override the new preset
+  setActiveTemplate: (id) => set({ activeTemplateId: id, customStyleOverrides: {} }),
   updateCustomStyle: (overrides) => set((state) => ({
     customStyleOverrides: { ...state.customStyleOverrides, ...overrides }
   })),
