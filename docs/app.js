@@ -1,4 +1,4 @@
-// CapShorts — Minimalist High-End SaaS Client Logic
+// Kadr — Minimalist High-End SaaS Client Logic
 
 document.addEventListener('DOMContentLoaded', () => {
   // 1. Mobile Menu Drawer Navigation
@@ -158,7 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const copyBtn = document.getElementById('btnCopyGit');
   if (copyBtn) {
     copyBtn.addEventListener('click', () => {
-      navigator.clipboard.writeText('git clone https://github.com/thealiraza2/CapShorts.git').then(() => {
+      navigator.clipboard.writeText('git clone https://github.com/Raymond0385/YT.git').then(() => {
         const original = copyBtn.textContent;
         copyBtn.textContent = 'COPIED!';
         setTimeout(() => {

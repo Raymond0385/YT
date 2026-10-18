@@ -1,12 +1,12 @@
 [package]
-name = "capshorts"
-version = "1.2.0"
-description = "CapShorts - Desktop AI Video Editor"
-authors = ["Ali Raza"]
+name = "kadr"
+version = "1.3.0"
+description = "Kadr - Desktop AI Video Editor"
+authors = ["Kadr contributors"]
 edition = "2021"
 
 [lib]
-name = "capshorts_lib"
+name = "kadr_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

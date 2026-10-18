@@ -45,7 +45,7 @@ def test_unique_path_adds_counter(tmp_path):
 def test_clean_filename():
     assert clean_filename("my clip.mp4") == "my clip.mp4"
     assert clean_filename("a:b*c?.mp4") == "a_b_c_.mp4"
-    assert clean_filename("") == "capshorts_export.mp4"
+    assert clean_filename("") == "kadr_export.mp4"
     assert clean_filename("../../evil") == "evil.mp4"
     assert clean_filename("x.MP4") == "x.MP4"
 

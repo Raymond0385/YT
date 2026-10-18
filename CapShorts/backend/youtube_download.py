@@ -1,5 +1,5 @@
 """
-youtube_download.py - YouTube import for CapShorts (yt-dlp wrapper).
+youtube_download.py - YouTube import for Kadr (yt-dlp wrapper).
 Only download content you own or have permission to use; respect YouTube's Terms of Service.
 """
 
@@ -134,7 +134,7 @@ def explain_error(err: Exception) -> str:
     text = str(err).lower()
     if "not available" in text and not find_js_runtimes():
         return ("YouTube refused this video. The app needs a JavaScript engine to read YouTube; "
-                "reinstall the latest CapShorts or install Node.js, then try again.")
+                "reinstall the latest Kadr or install Node.js, then try again.")
     if "sign in" in text or "age" in text and "confirm" in text:
         return "This video needs a signed-in YouTube account (age-restricted or private)."
     if "private" in text:

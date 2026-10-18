@@ -6,7 +6,7 @@ struct BackendProcess(Mutex<Option<Child>>);
 
 #[tauri::command]
 fn greet(name: &str) -> String {
-    format!("Hello, {}! CapShorts AI engine is ready.", name)
+    format!("Hello, {}! Kadr AI engine is ready.", name)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -17,7 +17,7 @@ pub fn run() {
         .manage(BackendProcess(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![greet])
         .setup(|app| {
-            println!("[tauri] CapShorts Desktop App launching...");
+            println!("[tauri] Kadr Desktop App launching...");
 
             // Find backend-engine executable next to the app or in resources
             if let Ok(resource_dir) = app.path().resource_dir() {
@@ -26,7 +26,7 @@ pub fn run() {
                     resource_dir.join("backend-engine"),
                     resource_dir.join("binaries").join("backend-engine.exe"),
                     resource_dir.join("binaries").join("backend-engine"),
-                    resource_dir.join("CapShorts").join("backend-engine.exe"),
+                    resource_dir.join("Kadr").join("backend-engine.exe"),
                     std::env::current_exe()
                         .ok()
                         .and_then(|p| p.parent().map(|d| d.join("binaries").join("backend-engine.exe")))
@@ -114,5 +114,5 @@ pub fn run() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("error while running CapShorts application");
+        .expect("error while running Kadr application");
 }

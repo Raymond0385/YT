@@ -92,7 +92,7 @@ export const ExportModal: React.FC = () => {
   );
   const [fps, setFps] = useState<number>(30);
   const [outputFilename, setOutputFilename] = useState(
-    activeClip ? `viral_short_${activeClip.duration}s.mp4` : 'capshorts_export.mp4'
+    activeClip ? `viral_short_${activeClip.duration}s.mp4` : 'kadr_export.mp4'
   );
   const [exportingSubtitle, setExportingSubtitle] = useState<'srt' | 'vtt' | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -236,7 +236,7 @@ export const ExportModal: React.FC = () => {
       const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = blobUrl;
-      const baseName = outputFilename.replace(/\.[^/.]+$/, "") || 'capshorts_captions';
+      const baseName = outputFilename.replace(/\.[^/.]+$/, "") || 'kadr_captions';
       link.download = `${baseName}.${format}`;
       document.body.appendChild(link);
       link.click();
@@ -623,7 +623,7 @@ export const ExportModal: React.FC = () => {
                 <Sparkles className="w-4 h-4" />
               </div>
               <div>
-                <p className="font-semibold text-zinc-300">CapShorts Community Edition</p>
+                <p className="font-semibold text-zinc-300">Kadr Community Edition</p>
                 <p className="text-[10px] text-zinc-500">Free, Local-First, Open-Source Alternative</p>
               </div>
             </div>

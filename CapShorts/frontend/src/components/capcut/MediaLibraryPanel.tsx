@@ -651,7 +651,7 @@ export const MediaLibraryPanel: React.FC = () => {
                   value={glossary}
                   onChange={(e) => setGlossary(e.target.value)}
                   rows={2}
-                  placeholder="ChatGPT, Kubernetes, CapShorts"
+                  placeholder="ChatGPT, Kubernetes, Kadr"
                   className="w-full bg-zinc-950/80 border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition-colors resize-none"
                 />
                 <div className="flex items-center space-x-2" data-testid="glossary-sets">

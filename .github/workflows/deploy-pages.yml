@@ -1,4 +1,4 @@
-name: Deploy CapShorts Website to GitHub Pages
+name: Deploy Kadr Website to GitHub Pages
 
 on:
   push:

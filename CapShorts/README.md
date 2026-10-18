@@ -1,6 +1,6 @@
 <div align="center">
 
-# ⚡ CapShorts
+# ⚡ Kadr
 ### The 100% Free, Local-First AI Video Editor for Short-Form Creators
 
 **Stop paying \$30/month for Opus Clip, Submagic, or CapCut Pro.**  
@@ -8,10 +8,10 @@ Generate word-accurate animated captions, extract viral vertical shorts, remove 
 
 ---
 
-[![Release](https://img.shields.io/github/v/release/thealiraza2/CapShorts?style=for-the-badge&color=00f2fe&logo=github)](https://github.com/thealiraza2/CapShorts/releases/latest)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20(Universal)-4facfe?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/thealiraza2/CapShorts/releases/latest)
+[![Release](https://img.shields.io/github/v/release/Raymond0385/YT?style=for-the-badge&color=00f2fe&logo=github)](https://github.com/Raymond0385/YT/releases/latest)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20(Universal)-4facfe?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/Raymond0385/YT/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-00c6ff?style=for-the-badge)](./LICENSE)
-[![Zero Setup](https://img.shields.io/badge/Setup-Zero%20Dependencies%20(Bundled)-6ee7b7?style=for-the-badge&logo=tauri)](https://github.com/thealiraza2/CapShorts/releases/latest)
+[![Zero Setup](https://img.shields.io/badge/Setup-Zero%20Dependencies%20(Bundled)-6ee7b7?style=for-the-badge&logo=tauri)](https://github.com/Raymond0385/YT/releases/latest)
 
 <br />
 
@@ -29,13 +29,13 @@ Ready-to-run desktop installers. **No Python, Git, or FFmpeg installation needed
 
 | Platform | Installer | Architecture | Download Link |
 | :--- | :--- | :--- | :--- |
-| **Windows** | `.exe` Setup | 64-bit (x86_64) | [**Download Setup (.exe)**](https://github.com/thealiraza2/CapShorts/releases/download/v1.1.4/CapShorts_1.1.4_x64-setup.exe) |
-| **Windows** | `.msi` Package | 64-bit Enterprise | [**Download MSI (.msi)**](https://github.com/thealiraza2/CapShorts/releases/download/v1.1.4/CapShorts_1.1.4_x64_en-US.msi) |
-| **macOS** | `.dmg` Universal | Apple Silicon (M1/M2/M3/M4) & Intel | [**Download Universal (.dmg)**](https://github.com/thealiraza2/CapShorts/releases/download/v1.1.4/CapShorts_1.1.4_universal.dmg) |
+| **Windows** | `.exe` Setup | 64-bit (x86_64) | [**Download Setup (.exe)**](https://github.com/Raymond0385/YT/releases/latest) |
+| **Windows** | `.msi` Package | 64-bit Enterprise | [**Download MSI (.msi)**](https://github.com/Raymond0385/YT/releases/latest) |
+| **macOS** | `.dmg` Universal | Apple Silicon (M1/M2/M3/M4) & Intel | [**Download Universal (.dmg)**](https://github.com/Raymond0385/YT/releases/latest) |
 
 ---
 
-## 💡 Why CapShorts?
+## 💡 Why Kadr?
 
 Every short-form creator knows the struggle:
 - Cloud tools charge **\$20–\$50 every single month**.
@@ -43,13 +43,13 @@ Every short-form creator knows the struggle:
 - Your data and private drafts sit on third-party servers.
 - Free tiers slap massive watermarks across your video.
 
-**CapShorts is built differently.** It runs directly on your machine. You own your media, your exports have **no watermarks**, and transcription takes literally 2 to 3 seconds.
+**Kadr is built differently.** It runs directly on your machine. You own your media, your exports have **no watermarks**, and transcription takes literally 2 to 3 seconds.
 
 ---
 
 ## 📊 Feature Comparison
 
-| Feature | ⚡ **CapShorts** | Opus Clip | Submagic | CapCut Pro |
+| Feature | ⚡ **Kadr** | Opus Clip | Submagic | CapCut Pro |
 | :--- | :---: | :---: | :---: | :---: |
 | **Price** | **100% Free / Open Source** | \$19–\$49 / mo | \$20–\$50 / mo | \$10–\$15 / mo |
 | **Watermarks** | **None (Never)** | Yes (on free plan) | Yes (on free plan) | Yes |
@@ -71,7 +71,7 @@ Every short-form creator knows the struggle:
 
 ### 2. 🎬 Opus-Style Viral Shorts Detection
 - Drop any 10-to-60 minute video or podcast.
-- CapShorts analyzes the speech transcript and extracts **25s–60s self-contained highlight clips**.
+- Kadr analyzes the speech transcript and extracts **25s–60s self-contained highlight clips**.
 - **Complete-Thought Guarantee**: Never cuts off mid-sentence or mid-thought using smart grammar and pause boundary detection.
 - Includes engagement virality score predictions.
 
@@ -109,7 +109,7 @@ Inspired by top creators and media studios:
 
 ## 🛠️ Architecture
 
-CapShorts pairs a lightweight native desktop container with a blazing-fast Python media daemon:
+Kadr pairs a lightweight native desktop container with a blazing-fast Python media daemon:
 
 ```
 CapShorts/
@@ -141,8 +141,8 @@ If you want to contribute or build from source:
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/thealiraza2/CapShorts.git
-cd CapShorts
+git clone https://github.com/Raymond0385/YT.git
+cd Kadr
 ```
 
 ### 2. Run the App

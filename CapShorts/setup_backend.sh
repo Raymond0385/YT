@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/backend"
 
 echo "========================================================"
-echo "  CapShorts - Local AI & Media Engine Setup (macOS/Linux)"
+echo "  Kadr - Local AI & Media Engine Setup (macOS/Linux)"
 echo "========================================================"
 
 # Check for python3 or python
@@ -39,5 +39,5 @@ pip install -r requirements.txt
 
 echo ""
 echo "========================================================"
-echo "  CapShorts Backend Setup Complete!"
+echo "  Kadr Backend Setup Complete!"
 echo "========================================================"

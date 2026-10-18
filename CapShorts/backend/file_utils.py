@@ -44,7 +44,7 @@ def unique_path(directory: str, filename: str) -> str:
     return candidate
 
 
-def clean_filename(name: str, default: str = "capshorts_export.mp4") -> str:
+def clean_filename(name: str, default: str = "kadr_export.mp4") -> str:
     """Strips path parts and characters Windows does not allow; keeps it ending in .mp4."""
     base = (name or "").strip().replace(chr(92), "/").split("/")[-1]
     base = re.sub(r'[<>:"|?*' + chr(0) + r']+', "_", base).strip(" .")

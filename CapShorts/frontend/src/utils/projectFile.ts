@@ -1,9 +1,13 @@
 import { WordToken, VideoClip, VideoSegment, BrollClip, SubtitlePreset, AspectRatio, ExportSettings } from '../types';
 
-export const PROJECT_FORMAT = 'capshorts-project';
+export const PROJECT_FORMAT = 'kadr-project';
+/** Files saved before the app was renamed. */
+export const LEGACY_PROJECT_FORMATS = ['capshorts-project'];
 /** Newer sections are optional and defaulted on load, so older files keep working without a version bump. */
 export const PROJECT_VERSION = 1;
-export const PROJECT_EXTENSION = '.capshorts';
+export const PROJECT_EXTENSION = '.kadr';
+/** Extensions the app can open: the current one and the one used before the rename. */
+export const PROJECT_OPEN_EXTENSIONS = ['.kadr', '.capshorts'];
 
 export interface ProjectVideoRef {
   name: string;
@@ -217,16 +221,16 @@ export function parseProject(text: string): ParseResult {
   try {
     raw = JSON.parse(text);
   } catch {
-    return { ok: false, error: 'This file is not a valid CapShorts project (cannot read it).' };
+    return { ok: false, error: 'This file is not a valid Kadr project (cannot read it).' };
   }
-  if (!isObj(raw) || raw.format !== PROJECT_FORMAT) {
-    return { ok: false, error: 'This file is not a CapShorts project.' };
+  if (!isObj(raw) || (raw.format !== PROJECT_FORMAT && !LEGACY_PROJECT_FORMATS.includes(String(raw.format)))) {
+    return { ok: false, error: 'This file is not a Kadr project.' };
   }
   if (!isNum(raw.version) || raw.version < 1) {
     return { ok: false, error: 'The project file has no valid version.' };
   }
   if (raw.version > PROJECT_VERSION) {
-    return { ok: false, error: 'This project was saved by a newer version of CapShorts. Update the app to open it.' };
+    return { ok: false, error: 'This project was saved by a newer version of Kadr. Update the app to open it.' };
   }
 
   const stamp = Date.now();
@@ -275,7 +279,7 @@ export function parseProject(text: string): ParseResult {
   const selId = isStr(v.selectedTimelineItemId) && selType !== 'none' ? v.selectedTimelineItemId : null;
 
   const project: ProjectFile = {
-    format: PROJECT_FORMAT,
+    format: PROJECT_FORMAT, // always written with the current name, even when an old file was opened
     version: raw.version,
     savedAt: isStr(raw.savedAt) ? raw.savedAt : '',
     appVersion: isStr(raw.appVersion) ? raw.appVersion : undefined,

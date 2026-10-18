@@ -1,5 +1,5 @@
 """
-engine.py - Local Python AI & Media Engine Daemon for CapShorts
+engine.py - Local Python AI & Media Engine Daemon for Kadr
 Powered by FastAPI, Faster-Whisper, native FFmpeg, and Master Groq Cloud Turbo Pool.
 """
 
@@ -59,7 +59,7 @@ try:
 except Exception as _speech_import_error:
     print(f"[engine] speech stack unavailable: {_speech_import_error}")
 
-app = FastAPI(title="CapShorts AI Engine", version="1.2.0")
+app = FastAPI(title="Kadr AI Engine", version="1.3.0")
 
 def get_ffmpeg_bin() -> str:
     """Resolves platform-appropriate FFmpeg executable."""
@@ -143,7 +143,14 @@ if os.path.exists(BIN_DIR):
 # Writable data location: the installed app lives in a read-only folder (e.g. Program Files),
 # so a packaged build keeps temp files, exports, keys and settings in the user profile.
 if getattr(sys, 'frozen', False):
-    DATA_DIR = os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "CapShorts")
+    _data_base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    DATA_DIR = os.path.join(_data_base, "Kadr")
+    _legacy_dir = os.path.join(_data_base, "CapShorts")      # folder used before the app was renamed
+    if not os.path.exists(DATA_DIR) and os.path.isdir(_legacy_dir):
+        try:
+            os.rename(_legacy_dir, DATA_DIR)
+        except OSError:
+            DATA_DIR = _legacy_dir                           # locked or read-only: keep working in the old folder
 else:
     DATA_DIR = BASE_DIR
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -1017,7 +1024,7 @@ class ExportPayload(BaseModel):
     preset: Dict[str, Any]
     custom_overrides: Optional[Dict[str, Any]] = None
     broll_clips: Optional[List[Dict[str, Any]]] = None
-    output_filename: Optional[str] = "capshorts_export.mp4"
+    output_filename: Optional[str] = "kadr_export.mp4"
     clip_start: Optional[float] = Field(default=None, ge=0.0)
     clip_end: Optional[float] = Field(default=None, ge=0.0)
     resolution: Optional[str] = "1080x1920"
@@ -1065,7 +1072,7 @@ def run_export_job(task_id: str, payload: ExportPayload):
         else:
             transcript_to_use = transcript_raw
 
-        safe_output_name = os.path.basename((payload.output_filename or "capshorts_export.mp4").strip().replace("\\", "/"))
+        safe_output_name = os.path.basename((payload.output_filename or "kadr_export.mp4").strip().replace("\\", "/"))
         if not safe_output_name.endswith(".mp4"):
             safe_output_name += ".mp4"
         output_file = get_safe_contained_path(OUTPUT_DIR, f"export_{task_id}_{safe_output_name}")
@@ -1223,7 +1230,7 @@ def run_export_job(task_id: str, payload: ExportPayload):
         saved_to = None
         save_error = None
         try:
-            saved_to = fu.copy_to_folder(output_file, current_export_dir(), fu.clean_filename(payload.output_filename or "capshorts_export.mp4"))
+            saved_to = fu.copy_to_folder(output_file, current_export_dir(), fu.clean_filename(payload.output_filename or "kadr_export.mp4"))
         except Exception as copy_err:
             print(f"[export] could not copy result to the export folder: {copy_err}")
             save_error = "Rendered, but could not save to the chosen folder. Use Download instead."
@@ -1359,7 +1366,7 @@ def export_set_settings(payload: YoutubeSettingsPayload):
 
 def housekeeping():
     """Deletes stale working files so temp/exports do not pile up (only our own prefixed files)."""
-    fu.cleanup_old_files(OUTPUT_DIR, ("export_", "capshorts_subtitles_"), 24 * 3600)
+    fu.cleanup_old_files(OUTPUT_DIR, ("export_", "kadr_subtitles_", "capshorts_subtitles_"), 24 * 3600)
     fu.cleanup_old_files(TEMP_DIR, ("audio_", "subtitles_", "retry_", "concat_"), 24 * 3600)
     fu.cleanup_old_files(TEMP_DIR, ("input_",), 7 * 24 * 3600)
 
@@ -1714,7 +1721,7 @@ def export_subtitles(payload: SubtitleExportPayload):
     else:
         raise HTTPException(status_code=400, detail="Unsupported subtitle format. Use srt, vtt, or ass.")
 
-    filename = f"capshorts_subtitles_{uuid.uuid4().hex[:6]}.{ext}"
+    filename = f"kadr_subtitles_{uuid.uuid4().hex[:6]}.{ext}"
     out_path = os.path.join(OUTPUT_DIR, filename)
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(content)
@@ -1736,7 +1743,7 @@ def download_subtitles_file(filename: str):
     media_type = "application/x-subrip" if filename.endswith(".srt") else "text/vtt" if filename.endswith(".vtt") else "text/plain"
     return FileResponse(path, media_type=media_type, filename=os.path.basename(path))
 
-CURRENT_ENGINE_VERSION = "1.2.0"
+CURRENT_ENGINE_VERSION = "1.3.0"
 # GitHub repo the in-app updater checks for releases (owner/name)
 UPDATE_REPO = os.environ.get("CAPSHORTS_UPDATE_REPO", "Raymond0385/YT")
 
@@ -1777,7 +1784,7 @@ def fetch_latest_github_release() -> Optional[Dict[str, Any]]:
     url = f"https://api.github.com/repos/{UPDATE_REPO}/releases/latest"
     req = urllib.request.Request(
         url,
-        headers={"User-Agent": f"CapShorts-Desktop-App/{CURRENT_ENGINE_VERSION}"}
+        headers={"User-Agent": f"Kadr-Desktop-App/{CURRENT_ENGINE_VERSION}"}
     )
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -1800,14 +1807,14 @@ def download_update_worker(download_url: str, filename: str):
         if parsed.netloc not in ("github.com", "objects.githubusercontent.com"):
             raise ValueError(f"Untrusted download host: {parsed.netloc}")
         
-        target_dir = os.path.join(tempfile.gettempdir(), "CapShorts_Updates")
+        target_dir = os.path.join(tempfile.gettempdir(), "Kadr_Updates")
         os.makedirs(target_dir, exist_ok=True)
         safe_name = os.path.basename(filename)
         dest_path = os.path.join(target_dir, safe_name)
         
         req = urllib.request.Request(
             download_url,
-            headers={"User-Agent": f"CapShorts-Desktop-App/{CURRENT_ENGINE_VERSION}"}
+            headers={"User-Agent": f"Kadr-Desktop-App/{CURRENT_ENGINE_VERSION}"}
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
             total_size = int(resp.headers.get("content-length", 0))
@@ -1879,7 +1886,7 @@ def get_update_status():
     latest_tag = "unknown"
     latest_version = CURRENT_ENGINE_VERSION
     update_available = False
-    release_title = "CapShorts Release"
+    release_title = "Kadr Release"
     release_notes = ""
     release_url = f"https://github.com/{UPDATE_REPO}/releases/latest"
     
@@ -1893,7 +1900,7 @@ def get_update_status():
     if release_data:
         latest_tag = release_data.get("tag_name", "unknown")
         latest_version = latest_tag.lstrip("v")
-        release_title = release_data.get("name") or f"CapShorts {latest_tag}"
+        release_title = release_data.get("name") or f"Kadr {latest_tag}"
         release_notes = release_data.get("body", "")
         release_url = release_data.get("html_url") or release_url
         
@@ -1932,7 +1939,7 @@ def get_update_status():
                 selected_download_url = dmg_asset.get("browser_download_url", "")
                 selected_asset_size = dmg_asset.get("size", 0)
     
-    details = f"New version {latest_tag} is ready to install!" if update_available else "CapShorts is up to date."
+    details = f"New version {latest_tag} is ready to install!" if update_available else "Kadr is up to date."
     
     return {
         "current_version": CURRENT_ENGINE_VERSION,
@@ -2042,7 +2049,7 @@ def apply_update():
         )
         if proc.returncode != 0:
             return {"success": False, "error": "Git pull failed."}
-        return {"success": True, "message": "CapShorts updated successfully! Reloading studio...", "action_required": "reload"}
+        return {"success": True, "message": "Kadr updated successfully! Reloading studio...", "action_required": "reload"}
     except Exception as e:
         return {"success": False, "error": f"Update failed: {e}"}
 
@@ -2051,6 +2058,7 @@ def get_telemetry_stats():
     """Returns local anonymous session stats."""
     return {
         "enabled": telemetry.is_enabled(),
+        "available": telemetry.is_available(),
         "machine_id": telemetry.machine_id,
         "os": telemetry.os_info,
         "session_seconds": telemetry.get_session_seconds(),
@@ -2064,6 +2072,7 @@ def get_telemetry_settings():
     """Returns telemetry opt-in status."""
     return {
         "enabled": telemetry.is_enabled(),
+        "available": telemetry.is_available(),
         "machine_id": telemetry.machine_id,
         "os": telemetry.os_info,
         "app_version": telemetry.app_version

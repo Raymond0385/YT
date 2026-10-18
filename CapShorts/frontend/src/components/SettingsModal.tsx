@@ -40,7 +40,9 @@ export const SettingsModal: React.FC = () => {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   // Privacy & Anonymous Diagnostics State
-  const [telemetryEnabled, setTelemetryEnabled] = useState(true);
+  const [telemetryEnabled, setTelemetryEnabled] = useState(false);
+  // False when no analytics server is configured: then nothing is ever sent and the switch is inactive
+  const [telemetryAvailable, setTelemetryAvailable] = useState(false);
   const [telemetryMachineId, setTelemetryMachineId] = useState('');
   const [telemetryOs, setTelemetryOs] = useState('');
   const [isUpdatingTelemetry, setIsUpdatingTelemetry] = useState(false);
@@ -50,7 +52,8 @@ export const SettingsModal: React.FC = () => {
       const res = await fetch(apiUrl('/api/system/telemetry-settings'));
       if (res.ok) {
         const data = await res.json();
-        setTelemetryEnabled(data.enabled !== false);
+        setTelemetryEnabled(data.enabled === true);
+        setTelemetryAvailable(data.available === true);
         setTelemetryMachineId(data.machine_id || '');
         setTelemetryOs(data.os || '');
       }
@@ -228,7 +231,7 @@ export const SettingsModal: React.FC = () => {
                 <Settings className="w-3.5 h-3.5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white tracking-wide">CapShorts Preferences</h3>
+                <h3 className="text-sm font-bold text-white tracking-wide">Kadr Preferences</h3>
                 <p className="text-[11px] text-zinc-400">Configure AI speech models, hardware engines, and integrations</p>
               </div>
             </div>
@@ -510,8 +513,8 @@ export const SettingsModal: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleToggleTelemetry(!telemetryEnabled)}
-                    disabled={isUpdatingTelemetry}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none cursor-pointer ${
+                    disabled={isUpdatingTelemetry || !telemetryAvailable}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${telemetryAvailable ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'} ${
                       telemetryEnabled ? 'bg-violet-600' : 'bg-zinc-700'
                     }`}
                   >
@@ -541,6 +544,13 @@ export const SettingsModal: React.FC = () => {
                     </div>
                   )}
                 </div>
+
+                {!telemetryAvailable && (
+                  <p className="text-[11px] text-emerald-300/90 bg-emerald-500/10 border border-emerald-500/25 rounded-lg px-3 py-2" data-testid="telemetry-unavailable">
+                    No analytics server is configured in this build, so nothing is ever sent. The list below describes what would be
+                    collected if you connect your own server.
+                  </p>
+                )}
 
                 <div className="grid grid-cols-2 gap-3 pt-1">
                   <div className="bg-black/30 border border-white/[0.06] rounded-xl p-3 space-y-1.5">
@@ -596,7 +606,7 @@ export const SettingsModal: React.FC = () => {
                       <h4 className="text-sm font-bold text-white">
                         {updateInfo?.update_available
                           ? 'New Update Available!'
-                          : 'CapShorts is Up to Date'}
+                          : 'Kadr is Up to Date'}
                       </h4>
                       <p className="text-[11px] text-zinc-400">
                         {updateInfo?.details || 'Check GitHub for new features and performance updates.'}
@@ -687,7 +697,7 @@ export const SettingsModal: React.FC = () => {
                           className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-bold rounded-xl transition-all active:scale-95 shadow-lg shadow-emerald-500/20 flex items-center space-x-2 disabled:opacity-50 text-xs"
                         >
                           <Download className={`w-3.5 h-3.5 ${isApplyingUpdate ? 'animate-bounce' : ''}`} />
-                          <span>{isApplyingUpdate ? 'Updating CapShorts...' : '1-Click Git Update'}</span>
+                          <span>{isApplyingUpdate ? 'Updating Kadr...' : '1-Click Git Update'}</span>
                         </button>
                       ) : downloadProgress?.status === 'completed' ? (
                         <button
@@ -705,7 +715,7 @@ export const SettingsModal: React.FC = () => {
                         <div className="flex items-center space-x-2">
                           {updateInfo.platform === 'windows' && updateInfo.msi_download_url && (
                             <button
-                              onClick={() => handleStartInAppUpdate(updateInfo.msi_download_url, updateInfo.asset_name?.replace('-setup.exe', '_en-US.msi') || 'CapShorts.msi')}
+                              onClick={() => handleStartInAppUpdate(updateInfo.msi_download_url, updateInfo.asset_name?.replace('-setup.exe', '_en-US.msi') || 'Kadr.msi')}
                               disabled={isDownloadingUpdate}
                               className="px-3 py-2 bg-white/[0.06] hover:bg-white/[0.1] text-zinc-300 hover:text-white rounded-xl text-xs font-semibold transition-all border border-white/[0.08]"
                               title="Download MSI installer instead"

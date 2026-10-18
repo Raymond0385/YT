@@ -1,4 +1,4 @@
-# ⚡ CapShorts — Complete Architecture & Developer Documentation
+# ⚡ Kadr — Complete Architecture & Developer Documentation
 
 > **The 100% Free, Local-First AI Video Editor for Short-Form Content Creators.**  
 > Native desktop suite for generating word-accurate animated captions, extracting viral 9:16 shorts, removing dead air, and rendering studio-grade videos with zero subscriptions, zero watermarks, and zero third-party cloud lock-in.
@@ -34,7 +34,7 @@ Short-form video platforms (TikTok, YouTube Shorts, Instagram Reels) require hig
 - **Queue Latency:** Long upload and rendering waiting times.
 - **Arbitrary Limitations:** Monthly credit caps and forced watermarks on free plans.
 
-**CapShorts solves this with a local-first desktop philosophy:**
+**Kadr solves this with a local-first desktop philosophy:**
 - **Zero Cost & Open Source:** Licensed under MIT for unlimited personal and commercial use.
 - **Instant Speed:** 2–3 second transcription via intelligent Groq Cloud Turbo rotation, with full offline on-device CPU/GPU fallback (CTranslate2 Faster-Whisper).
 - **Zero Watermarks:** Uncompressed studio export up to 60 FPS in 9:16, 16:9, or 1:1.
@@ -44,7 +44,7 @@ Short-form video platforms (TikTok, YouTube Shorts, Instagram Reels) require hig
 
 ## 2. High-Level Architecture
 
-CapShorts uses a modular architecture combining a high-performance **Rust desktop shell (Tauri v2)**, a reactive **React 18 frontend**, an asynchronous **Python 3.11 AI daemon (FastAPI)**, and a **portable FFmpeg media pipeline**.
+Kadr uses a modular architecture combining a high-performance **Rust desktop shell (Tauri v2)**, a reactive **React 18 frontend**, an asynchronous **Python 3.11 AI daemon (FastAPI)**, and a **portable FFmpeg media pipeline**.
 
 ```mermaid
 graph TD
@@ -94,8 +94,8 @@ graph TD
 ### Pre-Packaged Native Installers (Recommended)
 Pre-built binaries bundle Python, FFmpeg, and the AI engine with **zero system dependencies**:
 
-- **Windows:** Download `CapShorts_1.1.4_x64-setup.exe` (or enterprise `.msi`) from [GitHub Releases](https://github.com/thealiraza2/CapShorts/releases/latest).
-- **macOS:** Download `CapShorts_1.1.4_universal.dmg` (supports Apple Silicon M1/M2/M3/M4 & Intel Macs).
+- **Windows:** Download `Kadr_1.1.4_x64-setup.exe` (or enterprise `.msi`) from [GitHub Releases](https://github.com/Raymond0385/YT/releases/latest).
+- **macOS:** Download `Kadr_1.1.4_universal.dmg` (supports Apple Silicon M1/M2/M3/M4 & Intel Macs).
 
 ### Building From Source (Local Development)
 
@@ -107,8 +107,8 @@ Pre-built binaries bundle Python, FFmpeg, and the AI engine with **zero system d
 
 #### 1. Clone Repository
 ```bash
-git clone https://github.com/thealiraza2/CapShorts.git
-cd CapShorts
+git clone https://github.com/Raymond0385/YT.git
+cd Kadr
 ```
 
 #### 2. Start Backend Engine
@@ -147,10 +147,10 @@ cargo tauri dev
 ### 5.1 Media Import
 - Supported video containers: **MP4, MOV, ProRes, WebM, MKV, AVI**.
 - Drag and drop any video directly into the Canvas Monitor or use the **Import Video File** button in the Media Library.
-- CapShorts instantly inspects container metadata, dimensions, framerate, and audio sample rate via FFprobe.
+- Kadr instantly inspects container metadata, dimensions, framerate, and audio sample rate via FFprobe.
 
 ### 5.2 Speech-to-Text Transcription
-CapShorts offers two transcription engines:
+Kadr offers two transcription engines:
 1. **Ultra Fast Cloud AI (Groq Whisper-Large-v3 Turbo):**
    - Transcribes a 10-minute video in **~2 to 3 seconds**.
    - Rotates through a pool of Groq API keys automatically.
@@ -277,7 +277,7 @@ Inspects and toggles anonymous diagnostics opt-in/opt-out preferences.
 
 ## 7. Hardware Acceleration & Encoding
 
-CapShorts dynamically probes and verifies GPU video encoding support on startup:
+Kadr dynamically probes and verifies GPU video encoding support on startup:
 
 ```
 Probing GPU Encoders:
@@ -295,9 +295,9 @@ If a hardware encoder encounters a GPU driver timeout, the engine automatically 
 
 ## 8. Privacy, Security & Telemetry
 
-CapShorts is engineered around user privacy:
+Kadr is engineered around user privacy:
 - **100% On-Device Media Processing:** Your video tracks, audio clips, spoken transcripts, and subtitles never leave your personal computer.
-- **Anonymous Session Metrics:** To measure active installs and crash diagnostic rates across platforms, CapShorts pings an anonymous machine hash and OS name.
+- **Anonymous Session Metrics:** To measure active installs and crash diagnostic rates across platforms, Kadr pings an anonymous machine hash and OS name.
 - **Complete User Opt-Out:** In **Settings → Privacy**, creators can toggle telemetry **OFF** with 1 click. When disabled, zero network pings leave the computer.
 
 ---
@@ -313,7 +313,7 @@ CapShorts is engineered around user privacy:
 | `Delete` / `Backspace` | **Delete Segment** | Remove selected video or subtitle segment |
 | `N` | **Snap Toggle** | Toggle timeline playhead magnetic snapping |
 | `←` / `→` | **Step Frame** | Jump backward / forward by 1 frame (1/30s) |
-| `Ctrl + ,` / `⌘ + ,` | **Preferences** | Open CapShorts Settings & Hardware modal |
+| `Ctrl + ,` / `⌘ + ,` | **Preferences** | Open Kadr Settings & Hardware modal |
 
 ---
 
@@ -325,9 +325,9 @@ In pre-v1.1.0 releases, a React Rules of Hooks violation in `ExportModal.tsx` co
 ### Q: How do I get faster transcription speeds?
 Get a free API key from [console.groq.com/keys](https://console.groq.com/keys) and paste it into **Settings → AI Models**. Groq provides instant speech recognition (~2 seconds for a 5-minute video) at zero cost.
 
-### Q: Can I run CapShorts on a Mac without Rosetta?
-Yes. The macOS installer (`CapShorts_1.1.4_universal.dmg`) is compiled as a Universal 2 binary supporting both native Apple Silicon (ARM64) and Intel architectures.
+### Q: Can I run Kadr on a Mac without Rosetta?
+Yes. The macOS installer (`Kadr_1.1.4_universal.dmg`) is compiled as a Universal 2 binary supporting both native Apple Silicon (ARM64) and Intel architectures.
 
 ---
 
-*CapShorts is built and maintained by [Ali Raza](https://github.com/thealiraza2) and open-source contributors under the MIT License.*
+*Kadr is built and maintained by [Ali Raza](https://github.com/thealiraza2) and open-source contributors under the MIT License.*

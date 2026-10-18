@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run_app.sh - CapShorts Standalone Desktop AI Video Suite Launcher (macOS & Linux)
+# run_app.sh - Kadr Standalone Desktop AI Video Suite Launcher (macOS & Linux)
 set -e
 
 export PATH="$HOME/.bun/bin:/usr/local/bin:$PATH"
@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 echo "======================================================================="
-echo "    CapShorts - Standalone Desktop AI Video Studio (Local-First)"
+echo "    Kadr - Standalone Desktop AI Video Studio (Local-First)"
 echo "======================================================================="
 
 SPAWNED_BACKEND=0
@@ -16,7 +16,7 @@ SPAWNED_FRONTEND=0
 # Clean shutdown function
 cleanup() {
     echo ""
-    echo "[*] Cleaning up CapShorts processes..."
+    echo "[*] Cleaning up Kadr processes..."
     if [ "$SPAWNED_BACKEND" -eq 1 ] && [ -n "$BACKEND_PID" ]; then
         echo "[*] Stopping AI backend daemon (PID $BACKEND_PID)..."
         kill "$BACKEND_PID" 2>/dev/null || true
@@ -92,17 +92,17 @@ echo "    - Frontend:   http://localhost:5173"
 ELECTRON_EXE="$SCRIPT_DIR/frontend/node_modules/.bin/electron"
 
 if [ -f "$ELECTRON_EXE" ] && [ -x "$ELECTRON_EXE" ]; then
-    echo "[*] Launching CapShorts Desktop Application (Electron)..."
+    echo "[*] Launching Kadr Desktop Application (Electron)..."
     "$ELECTRON_EXE" "$SCRIPT_DIR/frontend/electron/main.cjs"
 elif command -v electron >/dev/null 2>&1; then
-    echo "[*] Launching CapShorts Desktop Application (Electron)..."
+    echo "[*] Launching Kadr Desktop Application (Electron)..."
     electron "$SCRIPT_DIR/frontend/electron/main.cjs"
 else
     # Launch in Standalone App Window Mode (Frameless, no browser tabs or address bar)
-    echo "[*] Launching CapShorts Standalone Desktop App Window..."
+    echo "[*] Launching Kadr Standalone Desktop App Window..."
     
     STANDALONE_LAUNCHED=0
-    APP_PROFILE="/tmp/capshorts_desktop_profile"
+    APP_PROFILE="/tmp/kadr_desktop_profile"
     mkdir -p "$APP_PROFILE"
 
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -147,7 +147,7 @@ else
     fi
 
     echo "======================================================================="
-    echo "  CapShorts Studio is running in Standalone Desktop Window mode!"
+    echo "  Kadr Studio is running in Standalone Desktop Window mode!"
     echo "  Press Ctrl+C in this terminal to quit."
     echo "======================================================================="
     wait

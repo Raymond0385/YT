@@ -861,9 +861,9 @@ export const CapShortsStudio: React.FC = () => {
       {/* ============ TOP BAR ============ */}
       <header className="cs-topbar">
         <div className="cs-logo" style={{ padding: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-          <img src="/logo.png" alt="CapShorts" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          <img src="/logo.png" alt="Kadr" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         </div>
-        <div className="cs-brand">CapShorts</div>
+        <div className="cs-brand">Kadr</div>
         <div className="cs-vdiv"></div>
 
         {/* Project Title Button */}

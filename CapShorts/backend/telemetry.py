@@ -1,5 +1,5 @@
 """
-telemetry.py - Anonymous Telemetry & Active User Diagnostics for CapShorts
+telemetry.py - Anonymous Telemetry & Active User Diagnostics for Kadr
 Tracks active installations, operating system, session duration, and export counts.
 100% Privacy-Preserving: No personal data, audio, video files, or transcripts are ever collected.
 Users can opt-out at any time via Settings -> Privacy.
@@ -15,13 +15,11 @@ import requests
 import json
 from typing import Dict, Any, Optional
 
-# Telemetry Endpoint Configuration
-DEFAULT_TELEMETRY_URL = os.environ.get(
-    "CAPSHORTS_TELEMETRY_URL",
-    "https://capshorts-telemetry.moharkasey.workers.dev/api/ping"
-)
+# Telemetry endpoint: there is deliberately NO built-in server. Nothing can be sent unless the person
+# running the app configures an endpoint of their own (KADR_TELEMETRY_URL or "endpoint" in the config file).
+DEFAULT_TELEMETRY_URL = os.environ.get("KADR_TELEMETRY_URL") or os.environ.get("CAPSHORTS_TELEMETRY_URL") or ""
 
-CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".capshorts")
+CONFIG_DIR = os.path.join(os.path.expanduser("~"), ".kadr")
 CONFIG_PATH = os.path.join(CONFIG_DIR, "telemetry_config.json")
 
 
@@ -44,10 +42,15 @@ def _write_config(data: Dict[str, Any]):
         pass
 
 
+def is_telemetry_available() -> bool:
+    """True only if an endpoint is configured. Without one the app never sends anything."""
+    return bool(get_telemetry_url())
+
+
 def is_telemetry_enabled() -> bool:
-    """Returns True if user has opted in to anonymous diagnostics (default: False)."""
+    """True if the user opted in (default: False) AND an endpoint is configured."""
     cfg = _read_config()
-    return cfg.get("enabled", False)
+    return bool(cfg.get("enabled", False)) and is_telemetry_available()
 
 
 def set_telemetry_enabled(enabled: bool):
@@ -60,7 +63,7 @@ def set_telemetry_enabled(enabled: bool):
 def get_telemetry_url() -> str:
     """Reads configured telemetry endpoint URL."""
     cfg = _read_config()
-    return cfg.get("endpoint", DEFAULT_TELEMETRY_URL)
+    return str(cfg.get("endpoint") or DEFAULT_TELEMETRY_URL or "")
 
 
 class TelemetryManager:
@@ -68,7 +71,7 @@ class TelemetryManager:
         self.session_start = time.time()
         self.machine_id = self._get_or_create_machine_id()
         self.os_info = self._get_os_info()
-        self.app_version = "1.1.4"
+        self.app_version = "1.3.0"
         self.videos_transcribed = 0
         self.videos_exported = 0
         self._lock = threading.Lock()
@@ -76,6 +79,9 @@ class TelemetryManager:
 
     def is_enabled(self) -> bool:
         return is_telemetry_enabled()
+
+    def is_available(self) -> bool:
+        return is_telemetry_available()
 
     def set_enabled(self, enabled: bool):
         set_telemetry_enabled(enabled)

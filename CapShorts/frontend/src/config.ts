@@ -1,5 +1,5 @@
 /**
- * API Configuration for CapShorts
+ * API Configuration for Kadr
  * 
  * In development (Vite dev server), the proxy handles /api → backend.
  * In production (Tauri .exe), we need the absolute backend URL.

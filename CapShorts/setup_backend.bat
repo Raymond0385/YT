@@ -1,9 +1,9 @@
 @echo off
-title CapShorts - Backend AI Setup
+title Kadr - Backend AI Setup
 cd /d "%~dp0backend"
 
 echo ========================================================
-echo   CapShorts - Local AI & Media Engine Setup
+echo   Kadr - Local AI & Media Engine Setup
 echo ========================================================
 
 python --version >nul 2>&1
@@ -36,6 +36,6 @@ pip install -r requirements.txt
 
 echo.
 echo ========================================================
-echo   CapShorts Backend Setup Complete!
+echo   Kadr Backend Setup Complete!
 echo ========================================================
 pause

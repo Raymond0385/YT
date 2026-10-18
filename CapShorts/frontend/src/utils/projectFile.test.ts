@@ -6,6 +6,8 @@ import {
   serializeProject,
   videoMatches,
   PROJECT_FORMAT,
+  PROJECT_EXTENSION,
+  PROJECT_OPEN_EXTENSIONS,
   PROJECT_VERSION,
   ProjectSource,
 } from './projectFile';
@@ -164,11 +166,11 @@ describe('project file', () => {
   });
 
   it('builds a safe file name', () => {
-    expect(projectFileName('My Viral Short 01')).toBe('My Viral Short 01.capshorts');
-    expect(projectFileName('a/b\\c:d*e?.')).toBe('a b c d e.capshorts');
-    expect(projectFileName('')).toBe('project.capshorts');
-    expect(projectFileName('   ')).toBe('project.capshorts');
-    expect(projectFileName('x'.repeat(200)).length).toBeLessThanOrEqual(80 + '.capshorts'.length);
+    expect(projectFileName('My Viral Short 01')).toBe('My Viral Short 01.kadr');
+    expect(projectFileName('a/b\\c:d*e?.')).toBe('a b c d e.kadr');
+    expect(projectFileName('')).toBe('project.kadr');
+    expect(projectFileName('   ')).toBe('project.kadr');
+    expect(projectFileName('x'.repeat(200)).length).toBeLessThanOrEqual(80 + '.kadr'.length);
   });
 
   it('round-trips the view, silence data and app settings carried by the project', () => {
@@ -249,5 +251,17 @@ describe('project file', () => {
     for (const needle of ['gsk_x', 'isPlaying', 'isBladeActive', 'exportDir', 'downloadDir', 'Users']) {
       expect(text).not.toContain(needle);
     }
+  });
+
+  it('still opens projects saved before the app was renamed', () => {
+    const current = JSON.parse(serializeProject(buildProject(source())));
+    current.format = 'capshorts-project';
+    const res = parseProject(JSON.stringify(current));
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.project.format).toBe(PROJECT_FORMAT);   // saved again under the new name
+    expect(res.project.title).toBe('My Viral Short 01');
+    expect(PROJECT_EXTENSION).toBe('.kadr');
+    expect(PROJECT_OPEN_EXTENSIONS).toEqual(['.kadr', '.capshorts']);
   });
 });

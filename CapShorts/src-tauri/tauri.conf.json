@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "CapShorts",
-  "version": "1.2.0",
-  "identifier": "com.capshorts.desktop",
+  "productName": "Kadr",
+  "version": "1.3.0",
+  "identifier": "com.kadr.studio",
   "build": {
     "beforeDevCommand": "npm run dev --prefix ../frontend",
     "beforeBuildCommand": "npm run build --prefix ../frontend",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "CapShorts - Desktop AI Video Editor",
+        "title": "Kadr - Desktop AI Video Editor",
         "width": 1320,
         "height": 860,
         "minWidth": 1024,

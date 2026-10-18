@@ -1,9 +1,38 @@
 # Changelog
 
-All notable changes to CapShorts are documented in this file.
+All notable changes to Kadr (formerly CapShorts) are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.3.0] - 2026-10-18
+
+The app is now called **Kadr** and has a new icon. Built on the open-source CapShorts by Ali Raza (MIT, see LICENSE).
+
+### Added
+- Undo / redo (Ctrl+Z, Ctrl+Y) for captions, shorts, cuts, style, B-roll and video settings.
+- Emoji in the exported video, drawn above the subtitles like in the preview (Noto Emoji images); Russian words in the emoji dictionary.
+- Save / open projects as `.kadr` files (older `.capshorts` files still open): captions, shorts, cuts, style, view state, settings.
+- Shorts editor: rename, trim, add and delete shorts; re-detect with min/max length and count.
+- Russian support for shorts detection and scoring.
+- Speech recognition: Turbo and Large-v3 offline models, language detected from several audio windows, optional audio clean-up, re-check of uncertain parts, per-word confidence highlighted in the editor, glossary sets.
+- YouTube import tab (yt-dlp + bundled QuickJS), downloads go to Downloads or a folder you choose.
+- Export folder setting and automatic clean-up of old temporary files.
+
+### Changed
+- Subtitle preview and exported video now share fonts, sizes, outline and positions; bundled fonts for FFmpeg.
+- Updates are checked against https://github.com/Raymond0385/YT/releases.
+- Packaged app keeps its data in `%LOCALAPPDATA%\Kadr` (the old `CapShorts` folder is moved over on first start).
+
+### Fixed
+- White "outline" in rendered subtitles (rgba shadow colors were parsed as white); missing boxes for box styles.
+- Rendering failed on sandboxed Windows profiles ("Path traversal forbidden").
+- YouTube links failing with "This video is not available" (a JavaScript engine is now bundled).
+- Timeline: every caption word can be selected and edited.
+- CI now runs the pytest backend tests and the frontend tests.
+
+### Privacy
+- Removed the built-in analytics server address. Telemetry stays off and cannot be enabled unless you configure an endpoint yourself.
 
 ## [1.1.4] - 2026-09-25
 

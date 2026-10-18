@@ -1,5 +1,5 @@
 """
-subtitle_gen.py - Advanced SubStation Alpha (.ass), SRT, and VTT Generator for CapShorts
+subtitle_gen.py - Advanced SubStation Alpha (.ass), SRT, and VTT Generator for Kadr
 Supports 100+ dynamic styles, karaoke tags, animations, outlines, shadows, and word highlighting.
 Dynamically scales font size, margins, and positioning across 9:16 Shorts, 16:9 Landscape, and 1:1 Square.
 """
@@ -203,7 +203,7 @@ def generate_ass_subtitles(
         scaled_shadow = 0.0
 
     header = f"""[Script Info]
-Title: CapShorts Export
+Title: Kadr Export
 ScriptType: v4.00+
 WrapStyle: 0
 ScaledBorderAndShadow: yes

@@ -693,7 +693,7 @@ export const CanvasPreview: React.FC = () => {
               Drop Video to Start Editing
             </h3>
             <p className="text-xs text-zinc-400 max-w-md leading-relaxed mb-5">
-              CapShorts transcribes speech in ~3s, highlights viral hooks, removes dead air, and crafts 9:16 vertical shorts automatically.
+              Kadr transcribes speech in ~3s, highlights viral hooks, removes dead air, and crafts 9:16 vertical shorts automatically.
             </p>
 
             <label className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 via-indigo-600 to-sky-500 hover:from-indigo-400 hover:to-sky-400 text-white font-semibold text-xs cursor-pointer shadow-lg shadow-indigo-500/25 border border-indigo-400/30 transition-all active:scale-95 mb-4 tracking-wide">

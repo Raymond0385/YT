@@ -1,4 +1,4 @@
-import { PROJECT_EXTENSION } from './projectFile';
+import { PROJECT_OPEN_EXTENSIONS } from './projectFile';
 
 /**
  * Reading and writing project files in the browser/WebView.
@@ -17,7 +17,7 @@ interface FileHandle {
 }
 
 const FILE_TYPES = [
-  { description: 'CapShorts project', accept: { 'application/json': [PROJECT_EXTENSION] } },
+  { description: 'Kadr project', accept: { 'application/json': PROJECT_OPEN_EXTENSIONS } },
 ];
 
 /** The file the project was last saved to / opened from: lets Ctrl+S overwrite it without asking again. */
@@ -94,7 +94,7 @@ export async function openProjectFile(): Promise<{ text: string; name: string } 
   return new Promise((resolve, reject) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = `${PROJECT_EXTENSION},application/json`;
+    input.accept = `${PROJECT_OPEN_EXTENSIONS.join(',')},application/json`;
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return resolve(null);

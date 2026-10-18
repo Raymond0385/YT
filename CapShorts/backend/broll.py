@@ -1,5 +1,5 @@
 """
-broll.py - Pexels Video Fetcher & FFmpeg Compositor for CapShorts
+broll.py - Pexels Video Fetcher & FFmpeg Compositor for Kadr
 Handles keyword searches, caching vertical video clips, and building multi-clip overlay pipelines.
 """
 

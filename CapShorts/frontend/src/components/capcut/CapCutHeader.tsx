@@ -98,18 +98,18 @@ export const CapCutHeader: React.FC = () => {
     <header className="h-13 bg-[#0d0d11]/95 backdrop-blur-2xl border-b border-white/[0.08] px-3.5 flex items-center justify-between z-30 select-none text-zinc-100 flex-shrink-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
       {/* Left: Brand + Project Title + Undo/Redo */}
       <div className="flex items-center space-x-3">
-        {/* CapShorts Brand Logo Badge */}
+        {/* Kadr Brand Logo Badge */}
         <div className="flex items-center space-x-2.5">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 via-sky-500 to-cyan-400 p-[1px] shadow-sm shadow-indigo-500/25 ring-1 ring-white/15 flex items-center justify-center">
             <img
               src="/logo.png"
-              alt="CapShorts"
+              alt="Kadr"
               className="w-full h-full rounded-[7px] object-contain bg-[#121216]"
             />
           </div>
           <div className="flex items-center space-x-1.5">
             <span className="font-bold text-sm tracking-tight text-white font-['Plus_Jakarta_Sans',sans-serif]">
-              Cap<span className="bg-gradient-to-r from-indigo-400 via-sky-400 to-cyan-300 bg-clip-text text-transparent">Shorts</span>
+              <span className="bg-gradient-to-r from-indigo-300 via-sky-300 to-cyan-200 bg-clip-text text-transparent">Kadr</span>
             </span>
             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 tracking-wider">
               STUDIO
