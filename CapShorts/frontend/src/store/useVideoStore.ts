@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { apiUrl } from '../config';
+import { clampRange, describeClipRange } from '../utils/clipEdit';
 import { WordToken, SubtitlePreset, BrollClip, VideoClip, VideoSegment, AspectRatio, EngineHealth, ExportSettings } from '../types';
 
 interface VideoStoreState {
@@ -67,6 +68,9 @@ interface VideoStoreState {
 
   setClips: (clips: VideoClip[]) => void;
   selectClip: (id: string | null) => void;
+  updateClip: (id: string, changes: { title?: string; start?: number; end?: number }, edge?: 'start' | 'end') => void;
+  deleteClip: (id: string) => void;
+  addClip: (start: number, end: number, title?: string) => string;
 
   setGroqApiKey: (key: string) => void;
   setRangeMode: (mode: 'full' | 'short_60s' | 'short_180s') => void;
@@ -492,6 +496,47 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
   }),
 
   setClips: (clips) => set({ clips }),
+  updateClip: (id, changes, edge = 'end') => set((state) => {
+    const clips = state.clips.map((c) => {
+      if (c.id !== id) return c;
+      const next = { ...c, custom: true };
+      if (changes.title !== undefined) next.title = changes.title;
+      if (changes.start !== undefined || changes.end !== undefined) {
+        const [s, e] = clampRange(
+          changes.start ?? c.start,
+          changes.end ?? c.end,
+          state.duration,
+          changes.start !== undefined && changes.end === undefined ? 'start' : changes.end !== undefined && changes.start === undefined ? 'end' : edge
+        );
+        next.start = s;
+        next.end = e;
+        next.duration = Math.round((e - s) * 10) / 10;
+        Object.assign(next, describeClipRange(state.transcript, s, e));
+      }
+      return next;
+    });
+    return { clips };
+  }),
+  deleteClip: (id) => set((state) => ({
+    clips: state.clips.filter((c) => c.id !== id),
+    selectedClipId: state.selectedClipId === id ? null : state.selectedClipId,
+  })),
+  addClip: (start, end, title) => {
+    const [s, e] = clampRange(start, end, get().duration, 'end');
+    const id = `clip-custom-${Date.now()}-${Math.floor(Math.random() * 1e4)}`;
+    const clip = {
+      id,
+      title: title || 'My short',
+      start: s,
+      end: e,
+      duration: Math.round((e - s) * 10) / 10,
+      virality_score: 0,
+      custom: true,
+      ...describeClipRange(get().transcript, s, e),
+    };
+    set((state) => ({ clips: [...state.clips, clip].sort((a, b) => a.start - b.start), selectedClipId: id, currentTime: s }));
+    return id;
+  },
   selectClip: (id) => set((state) => {
     if (!id) {
       return { selectedClipId: null };

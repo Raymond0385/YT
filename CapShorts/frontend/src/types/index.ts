@@ -53,6 +53,8 @@ export interface VideoClip {
   virality_score: number;
   keywords: string[];
   transcript_snippet: string;
+  /** true for shorts the user created or edited by hand */
+  custom?: boolean;
 }
 
 export interface VideoSegment {

@@ -28,6 +28,7 @@ import {
 import { useShallow } from 'zustand/react/shallow';
 import { useVideoStore } from '../../store/useVideoStore';
 import { apiUrl } from '../../config';
+import { ShortsPanel } from './ShortsPanel';
 import { SubtitlePreset, VideoClip, BrollClip } from '../../types';
 import templatesData from '../../data/templates.json';
 import { formatTime, formatTimeWithMs } from '../../utils/timeFormat';
@@ -960,81 +961,7 @@ export const MediaLibraryPanel: React.FC = () => {
         )}
 
         {/* ======================= AI SHORTS TAB ======================= */}
-        {activeTab === 'shorts' && (
-          <div className="space-y-3 animate-fade">
-            <div className="flex items-center justify-between pb-1">
-              <div>
-                <h4 className="text-xs font-bold text-white flex items-center space-x-1.5">
-                  <Scissors className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>AI Viral Shorts ({clips.length})</span>
-                </h4>
-                <p className="text-[10px] text-zinc-400">Auto-detected virality highlights</p>
-              </div>
-              <button
-                onClick={async () => {
-                  try {
-                    const res = await fetch(apiUrl('/api/clips/generate'), {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ words: transcript, duration: duration || 60 })
-                    });
-                    if (res.ok) {
-                      const data = await res.json();
-                      if (data.clips) setClips(data.clips);
-                    }
-                  } catch (e) {
-                    console.warn(e);
-                  }
-                }}
-                className="text-[10px] px-2.5 py-1 rounded-lg bg-zinc-950/80 border border-white/[0.08] text-indigo-300 hover:bg-zinc-800 transition-colors"
-              >
-                Re-detect
-              </button>
-            </div>
-
-            <div className="space-y-2.5">
-              {clips.map(clip => {
-                const isSelected = selectedClipId === clip.id;
-                return (
-                  <div
-                    key={clip.id}
-                    onClick={() => {
-                      selectClip(clip.id);
-                      setCurrentTime(clip.start);
-                    }}
-                    className={`p-3.5 rounded-2xl border cursor-pointer transition-all duration-150 ${
-                      isSelected
-                        ? 'bg-indigo-950/30 border-indigo-400/80 ring-2 ring-indigo-500/30 shadow-lg shadow-indigo-500/10'
-                        : 'bg-zinc-900/60 border-white/[0.08] hover:border-white/[0.18] hover:bg-zinc-800/40'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs font-bold text-white truncate max-w-[200px]">{clip.title}</span>
-                      <div className="flex items-center space-x-1 text-[10px] font-bold text-amber-300 bg-amber-500/15 px-2 py-0.5 rounded-full border border-amber-500/30 shadow-xs">
-                        <Flame className="w-3 h-3 fill-amber-400 text-amber-400" />
-                        <span>{clip.virality_score}%</span>
-                      </div>
-                    </div>
-                    <p className="text-[11px] text-zinc-300 line-clamp-2 italic mb-2.5">"{clip.hook}"</p>
-                    <div className="flex items-center justify-between text-[10px] text-zinc-400">
-                      <span className="font-mono">{formatTime(clip.start)} - {formatTime(clip.end)} ({clip.duration}s)</span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          selectClip(clip.id);
-                          setIsExportModalOpen(true);
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 hover:from-indigo-400 hover:to-sky-400 text-white font-semibold text-[10px] shadow-sm transition-all active:scale-95"
-                      >
-                        Export Short
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        {activeTab === 'shorts' && <ShortsPanel />}
 
         {/* ======================= B-ROLL TAB ======================= */}
         {activeTab === 'broll' && (
