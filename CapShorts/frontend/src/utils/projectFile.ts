@@ -14,6 +14,8 @@ export interface ProjectVideoRef {
   size: number;
   lastModified: number;
   duration: number;
+  /** Id of the copy of the video kept by the engine, so the project can open it without asking. */
+  mediaId?: string;
 }
 
 type PreviewZoom = 'fit' | '50%' | '75%' | '100%';
@@ -118,12 +120,14 @@ export interface ProjectSource {
   silenceBackup: SilenceBackup | null;
   /** Set while a project is open without its video: keeps the reference to the original file. */
   projectNeedsVideo?: ProjectVideoRef | null;
+  /** Id of the kept copy of the video (see videoKeeper). */
+  mediaId?: string | null;
 }
 
 export function buildProject(src: ProjectSource, appVersion?: string): ProjectFile {
   const file = src.videoFile;
   const video: ProjectVideoRef = file
-    ? { name: file.name, size: file.size, lastModified: file.lastModified, duration: src.duration }
+    ? { name: file.name, size: file.size, lastModified: file.lastModified, duration: src.duration, ...(src.mediaId ? { mediaId: src.mediaId } : {}) }
     : src.projectNeedsVideo ?? { name: src.videoName || '', size: 0, lastModified: 0, duration: src.duration };
 
   return {
@@ -289,6 +293,7 @@ export function parseProject(text: string): ParseResult {
       size: isNum(video.size) ? video.size : 0,
       lastModified: isNum(video.lastModified) ? video.lastModified : 0,
       duration: isNum(video.duration) ? video.duration : 0,
+      ...(isStr(video.mediaId) && /^[0-9a-f]{24}$/.test(video.mediaId) ? { mediaId: video.mediaId } : {}),
     },
     aspectRatio: aspect as AspectRatio,
     transcript: words,

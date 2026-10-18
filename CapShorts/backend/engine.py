@@ -40,6 +40,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from subtitle_gen import generate_ass_subtitles, generate_srt_subtitles, generate_vtt_subtitles, compute_layout
 import emoji_overlay as eo
 import groq_chunks as gc
+import media_store
 import reframe
 from broll import search_pexels_videos, download_broll_clip, build_ffmpeg_broll_filter
 from clip_generator import detect_viral_clips
@@ -214,6 +215,7 @@ def setup_fontconfig():
 
 TEMP_DIR = os.path.join(DATA_DIR, "temp")
 OUTPUT_DIR = os.path.join(DATA_DIR, "outputs")
+MEDIA_DIR = os.path.join(DATA_DIR, "media")
 ENV_FILE = os.path.join(DATA_DIR, ".env")
 os.makedirs(TEMP_DIR, exist_ok=True)
 setup_fontconfig()
@@ -1432,6 +1434,29 @@ def open_in_file_manager(path: str) -> None:
     else:
         subprocess.Popen(["xdg-open", path])
 
+class KeepMediaPayload(BaseModel):
+    video_path: str
+
+@app.post("/api/media/keep", dependencies=[Depends(verify_loopback_request), Depends(verify_local_origin)])
+def keep_media(payload: KeepMediaPayload):
+    """Keeps the uploaded video for a saved project so it can be reopened without choosing the file again."""
+    src = fu.contained_path(TEMP_DIR, payload.video_path)
+    if not src or not os.path.isfile(src):
+        raise HTTPException(status_code=404, detail="Video not found")
+    try:
+        return {"media_id": media_store.keep(MEDIA_DIR, src)}
+    except OSError as e:
+        print(f"[media] could not keep the video: {e}")
+        raise HTTPException(status_code=507, detail="Could not store the video")
+
+@app.get("/api/media/{media_id}", dependencies=[Depends(verify_loopback_request), Depends(verify_local_origin)])
+def get_media(media_id: str):
+    """Returns a video kept by a saved project."""
+    path = media_store.find(MEDIA_DIR, media_id)
+    if not path:
+        raise HTTPException(status_code=404, detail="Video not found")
+    return FileResponse(path)
+
 @app.post("/api/export/open-folder", dependencies=[Depends(verify_loopback_request), Depends(verify_local_origin)])
 def export_open_folder():
     """Opens the folder finished exports are saved to (only that folder, never a path from the request)."""
@@ -1446,6 +1471,7 @@ def export_open_folder():
 
 def housekeeping():
     """Deletes stale working files so temp/exports do not pile up (only our own prefixed files)."""
+    media_store.prune(MEDIA_DIR)
     fu.cleanup_old_files(OUTPUT_DIR, ("export_", "kadr_subtitles_", "capshorts_subtitles_"), 24 * 3600)
     fu.cleanup_old_files(TEMP_DIR, ("audio_", "subtitles_", "retry_", "concat_"), 24 * 3600)
     fu.cleanup_old_files(TEMP_DIR, ("input_",), 7 * 24 * 3600)

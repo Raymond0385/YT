@@ -5,6 +5,15 @@ All notable changes to Kadr (formerly CapShorts) are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Saved projects and the autosave now bring their video back: the engine keeps a copy (a hard link, no extra disk space) and the project opens it by itself instead of asking for the file.
+
+### Fixed
+- Subtitle presets in the Styles tab could not be selected once a font or color had been changed by hand; choosing a preset now replaces those tweaks.
+- The installer did not stop the background engine, so uninstalling left `backend-engine.exe` behind.
+
 ## [1.4.0] - 2026-10-18
 
 ### Added

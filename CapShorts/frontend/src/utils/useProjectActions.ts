@@ -5,6 +5,7 @@ import {
   currentProjectFileName, currentProjectHandle, forgetProjectFile, openProjectFile, openProjectFromHandle, saveProjectFile,
 } from './projectIO';
 import { projectDb } from './projectDb';
+import { keepVideo, restoreKeptVideo } from './videoKeeper';
 import { Draft, isMeaningful, RecentProject, removeRecent, upsertRecent } from './recents';
 
 type Notice = { text: string; kind: 'ok' | 'error' } | null;
@@ -57,7 +58,8 @@ export function useProjectActions() {
   const writeDraft = useCallback(async () => {
     const state = useVideoStore.getState();
     if (!isMeaningful(state)) return;
-    const text = serializeProject(buildProject(state));
+    const mediaId = await keepVideo(state.videoFile, state.serverVideoPath);
+    const text = serializeProject(buildProject({ ...state, mediaId }));
     await projectDb.saveDraft({ savedAt: Date.now(), title: state.projectTitle, text, videoName: state.videoFile?.name || state.videoName || '' });
   }, []);
 
@@ -118,7 +120,8 @@ export function useProjectActions() {
   const save = useCallback(async (askWhere = false) => {
     try {
       const state = useVideoStore.getState();
-      const text = serializeProject(buildProject(state));
+      const mediaId = await keepVideo(state.videoFile, state.serverVideoPath);
+      const text = serializeProject(buildProject({ ...state, mediaId }));
       const saved = await saveProjectFile(text, projectFileName(state.projectTitle), askWhere);
       if (saved) {
         markSaved();
@@ -129,6 +132,16 @@ export function useProjectActions() {
       say(`Could not save the project: ${e?.message || 'unknown error'}`, 'error');
     }
   }, [markSaved, rememberFile, say]);
+
+  /** Gets the project's video back from the engine's kept copy, so nobody has to pick it again. */
+  const reattachVideo = useCallback(async (project: { video: { name: string; lastModified?: number; mediaId?: string } }) => {
+    if (!project.video.mediaId) return;
+    const file = await restoreKeptVideo(project.video);
+    if (file && useVideoStore.getState().projectNeedsVideo) {
+      useVideoStore.getState().attachProjectVideo(file);
+      say('Video loaded with the project');
+    }
+  }, [say]);
 
   /** Applies the text of a project file; shared by Open and the recent list. */
   const applyFile = useCallback(async (file: { text: string; name: string }) => {
@@ -142,8 +155,9 @@ export function useProjectActions() {
     markSaved();
     await rememberFile(file.name);
     say(`Opened ${file.name}`);
+    void reattachVideo(parsed.project);
     return true;
-  }, [markSaved, rememberFile, say]);
+  }, [markSaved, reattachVideo, rememberFile, say]);
 
   const open = useCallback(async () => {
     if (dirtyRef.current && !window.confirm('You have unsaved changes. Open another project and discard them?')) return;
@@ -195,7 +209,8 @@ export function useProjectActions() {
     setFileName(null);
     setRecovery(null);
     say('Unsaved work restored. Save it to keep it.');
-  }, [recovery, say]);
+    void reattachVideo(parsed.project);
+  }, [recovery, reattachVideo, say]);
 
   const discardDraft = useCallback(() => {
     setRecovery(null);

@@ -103,6 +103,22 @@ describe('project file', () => {
     expect(p.video).toEqual(ref);
   });
 
+  it('stores the id of the kept video and reads it back; ignores a malformed id', () => {
+    const id = 'a1b2c3d4e5f60718293a4b5c';
+    const text = serializeProject(buildProject(source({ mediaId: id })));
+    const parsed = parseProject(text);
+    expect(parsed.ok && parsed.project.video.mediaId).toBe(id);
+    const bad = JSON.parse(text);
+    bad.video.mediaId = '../../etc/passwd';
+    const again = parseProject(JSON.stringify(bad));
+    expect(again.ok && again.project.video.mediaId).toBeUndefined();
+  });
+
+  it('keeps the kept-video id of a project that is open without its video', () => {
+    const ref = { name: 'orig.mp4', size: 99, lastModified: 5, duration: 10, mediaId: 'a1b2c3d4e5f60718293a4b5c' };
+    expect(buildProject(source({ videoFile: null, videoName: '', projectNeedsVideo: ref })).video).toEqual(ref);
+  });
+
   it('rejects files that are not projects', () => {
     expect(parseProject('not json').ok).toBe(false);
     expect(parseProject('[]').ok).toBe(false);
