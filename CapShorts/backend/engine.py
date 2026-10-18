@@ -37,7 +37,8 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTa
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 
-from subtitle_gen import generate_ass_subtitles, generate_srt_subtitles, generate_vtt_subtitles
+from subtitle_gen import generate_ass_subtitles, generate_srt_subtitles, generate_vtt_subtitles, compute_layout
+import emoji_overlay as eo
 from broll import search_pexels_videos, download_broll_clip, build_ffmpeg_broll_filter
 from clip_generator import detect_viral_clips
 from groq_transcribe import transcribe_with_groq_pool
@@ -1021,6 +1022,8 @@ class ExportPayload(BaseModel):
     clip_end: Optional[float] = Field(default=None, ge=0.0)
     resolution: Optional[str] = "1080x1920"
     aspect_ratio: Optional[str] = "9:16"
+    # [{"start": s, "end": e, "emoji": "..."}] in source-video seconds: drawn above the subtitles like in the preview
+    emojis: Optional[List[Dict[str, Any]]] = None
 
     @model_validator(mode="after")
     def validate_clip_range(self):
@@ -1163,7 +1166,29 @@ def run_export_job(task_id: str, payload: ExportPayload):
                 "-vf", f"ass='{escaped_ass}'"
             ]
 
-        base_cmd = [ffmpeg_bin, "-y"] + trim_args + ["-i", input_video] + extra_inputs + filter_args
+        # Emoji above the subtitles (libass cannot draw color emoji, so they are images laid over the video)
+        plain_filter_args = list(filter_args)
+        emoji_inputs: List[str] = []
+        if payload.emojis:
+            try:
+                events = eo.shift_events(
+                    payload.emojis,
+                    payload.clip_start if is_clip_export else None,
+                    payload.clip_end if is_clip_export else None,
+                )
+                emoji_dir = eo.find_emoji_dir([os.path.join(BASE_DIR, "emoji"), os.path.join(MEIPASS_DIR, "emoji")])
+                layout = compute_layout({**payload.preset, **(payload.custom_overrides or {})}, target_w, target_h)
+                emoji_inputs, emoji_graph = eo.build_overlay_graph(
+                    events, emoji_dir, transcript_to_use, target_w, target_h, layout, 1 + extra_inputs.count("-i"))
+                if emoji_graph:
+                    filter_args = eo.attach_to_filters(filter_args, emoji_graph)
+                else:
+                    emoji_inputs = []
+            except Exception as emoji_err:
+                print(f"[export] emoji overlay skipped: {emoji_err}")
+                emoji_inputs, filter_args = [], plain_filter_args
+
+        base_cmd = [ffmpeg_bin, "-y"] + trim_args + ["-i", input_video] + extra_inputs + emoji_inputs + filter_args
         cmd = base_cmd + hw_args + ["-c:a", "aac", output_file]
 
         try:
@@ -1181,6 +1206,16 @@ def run_export_job(task_id: str, payload: ExportPayload):
                 proc2 = subprocess.run(fb_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300, **SUBPROCESS_EXTRA_KWARGS)
             except subprocess.TimeoutExpired:
                 raise RuntimeError("FFmpeg software fallback timed out after 300 seconds.")
+
+            if proc2.returncode != 0 and emoji_inputs:
+                # Never lose the render because of the emoji layer: try once more without it
+                print(f"[export] FFmpeg error with emoji overlay: {proc2.stderr.decode('utf-8', errors='ignore')[-1500:]}")
+                print("[export] Retrying without emoji...")
+                plain_cmd = [ffmpeg_bin, "-y"] + trim_args + ["-i", input_video] + extra_inputs + plain_filter_args
+                try:
+                    proc2 = subprocess.run(plain_cmd + cpu_args + ["-c:a", "aac", output_file], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300, **SUBPROCESS_EXTRA_KWARGS)
+                except subprocess.TimeoutExpired:
+                    raise RuntimeError("FFmpeg software fallback timed out after 300 seconds.")
 
             if proc2.returncode != 0:
                 raise RuntimeError("FFmpeg render failed on both hardware and software encoders.")

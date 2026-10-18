@@ -29,11 +29,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Copy subtitle fonts into the installer resources
+      - name: Copy subtitle fonts and emoji images into the installer resources
         shell: bash
         run: |
           mkdir -p CapShorts/src-tauri/binaries/fonts
           cp CapShorts/frontend/public/fonts/*.ttf CapShorts/src-tauri/binaries/fonts/
+          mkdir -p CapShorts/src-tauri/binaries/emoji
+          cp CapShorts/backend/emoji/* CapShorts/src-tauri/binaries/emoji/
 
       - name: Download QuickJS (JavaScript engine used to read YouTube)
         shell: bash

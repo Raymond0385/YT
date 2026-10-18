@@ -146,3 +146,4 @@ CapShorts/src-tauri/target/
 CapShorts/backend/fonts.conf
 CapShorts/backend/fontcache/
 CapShorts/src-tauri/binaries/fonts/
+CapShorts/src-tauri/binaries/emoji/

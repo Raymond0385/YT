@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Share2, CheckCircle2, Download, Sparkles, FolderDown, Zap, Flame, Loader2, FileText, AlertTriangle, RotateCcw } from 'lucide-react';
 import { useVideoStore } from '../store/useVideoStore';
 import { apiUrl } from '../config';
+import { buildEmojiEvents } from '../utils/emojiEvents';
 import templatesData from '../data/templates.json';
 import { SubtitlePreset } from '../types';
 
@@ -80,7 +81,8 @@ export const ExportModal: React.FC = () => {
     clips,
     selectedClipId,
     videoFile,
-    serverVideoPath
+    serverVideoPath,
+    showEmojis
   } = useVideoStore();
 
   const activeClip = selectedClipId ? clips.find(c => c.id === selectedClipId) : null;
@@ -292,6 +294,17 @@ export const ExportModal: React.FC = () => {
       if (activeClip) {
         payload.clip_start = activeClip.start;
         payload.clip_end = activeClip.end;
+      }
+
+      // The emoji the preview shows above the subtitles, so the render matches it
+      if (showEmojis) {
+        const blockSize = (customStyleOverrides as any)?.maxWordsPerBlock ?? preset.maxWordsPerBlock ?? 2;
+        const events = buildEmojiEvents(
+          transcript,
+          blockSize,
+          activeClip ? { start: activeClip.start, end: activeClip.end } : undefined
+        );
+        if (events.length) payload.emojis = events;
       }
 
       const res = await fetch(apiUrl('/api/export'), {
