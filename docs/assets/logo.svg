@@ -1,4 +1,29 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-  <rect x="2" y="4" width="20" height="16" rx="3"></rect>
-  <path d="M7 15h4M15 15h2M7 11h10"></path>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Kadr">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b1f52"/><stop offset="1" stop-color="#083456"/>
+    </linearGradient>
+    <linearGradient id="frame" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1024" y2="1024">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#bae6fd"/>
+    </linearGradient>
+    <linearGradient id="mark" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1024" y2="1024">
+      <stop offset="0" stop-color="#969cff"/><stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="230" fill="url(#bg)"/>
+  <g>
+    <line x1="327.7" y1="184.3" x2="460.8" y2="184.3" stroke="url(#frame)" stroke-width="49.2" stroke-linecap="round"/>
+    <line x1="327.7" y1="184.3" x2="327.7" y2="317.4" stroke="url(#frame)" stroke-width="49.2" stroke-linecap="round"/>
+    <line x1="696.3" y1="184.3" x2="563.2" y2="184.3" stroke="url(#frame)" stroke-width="49.2" stroke-linecap="round"/>
+    <line x1="696.3" y1="184.3" x2="696.3" y2="317.4" stroke="url(#frame)" stroke-width="49.2" stroke-linecap="round"/>
+    <line x1="327.7" y1="839.7" x2="460.8" y2="839.7" stroke="url(#frame)" stroke-width="49.2" stroke-linecap="round"/>
+    <line x1="327.7" y1="839.7" x2="327.7" y2="706.6" stroke="url(#frame)" stroke-width="49.2" stroke-linecap="round"/>
+    <line x1="696.3" y1="839.7" x2="563.2" y2="839.7" stroke="url(#frame)" stroke-width="49.2" stroke-linecap="round"/>
+    <line x1="696.3" y1="839.7" x2="696.3" y2="706.6" stroke="url(#frame)" stroke-width="49.2" stroke-linecap="round"/>
+  </g>
+  <g>
+    <line x1="435.2" y1="343.0" x2="435.2" y2="681.0" stroke="url(#mark)" stroke-width="57.3" stroke-linecap="round"/>
+    <line x1="435.2" y1="512.0" x2="609.3" y2="343.0" stroke="url(#mark)" stroke-width="57.3" stroke-linecap="round"/>
+    <line x1="435.2" y1="512.0" x2="609.3" y2="681.0" stroke="url(#mark)" stroke-width="57.3" stroke-linecap="round"/>
+  </g>
 </svg>

@@ -3,622 +3,125 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kadr — The Free, Local-First AI Video Editor for Short-Form Creators</title>
-  <meta name="description" content="Stop paying $30/month for Opus Clip, Submagic, or CapCut Pro. Generate word-accurate animated subtitles, extract viral vertical shorts, and export studio-quality videos with zero subscriptions.">
+  <title>Kadr — local AI video editor for Shorts</title>
+  <meta name="description" content="Kadr is a desktop video editor for Shorts, Reels and TikTok: word-timed captions, shorts cut from long videos, dead-air removal and export. It runs on your computer.">
   <link rel="icon" type="image/x-icon" href="./assets/favicon.ico">
-  
   <link rel="canonical" href="https://raymond0385.github.io/YT/">
-  
-  <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://raymond0385.github.io/YT/">
-  <meta property="og:title" content="Kadr — The Free, Local-First AI Video Editor">
-  <meta property="og:description" content="Generate word-accurate animated captions, extract viral shorts, remove dead air, and export studio-quality videos with zero subscriptions.">
+  <meta property="og:title" content="Kadr — local AI video editor for Shorts">
+  <meta property="og:description" content="Word-timed captions, shorts from long videos, dead-air removal and export. Runs on your computer.">
   <meta property="og:image" content="https://raymond0385.github.io/YT/assets/logo.png">
-
-  <!-- Twitter Cards -->
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Kadr — The Free, Local-First AI Video Editor">
-  <meta name="twitter:description" content="Stop paying $30/month for Opus Clip, Submagic, or CapCut Pro. High-performance desktop AI video editor.">
-  <meta name="twitter:image" content="https://raymond0385.github.io/YT/assets/logo.png">
-  
-  <!-- Modern Inter & JetBrains Mono Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
-  
+  <meta name="twitter:card" content="summary">
+  <meta name="color-scheme" content="dark">
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-
-  <!-- Sticky Navbar (Backdrop Blur, Real Brand Logo, Zero Overlap Bug) -->
-  <header class="site-navbar">
-    <div class="container nav-content">
-      <a href="#" class="brand-link">
-        <img src="./assets/logo.png" alt="Kadr Official Logo" class="brand-logo-img">
-        <span>Kadr</span>
-        <span class="brand-version-tag">v1.1.4</span>
-      </a>
-
-      <!-- Desktop Navigation Menu -->
-      <ul class="nav-links-menu">
-        <li><a href="#features" class="nav-item-link">Features</a></li>
-        <li><a href="#presets" class="nav-item-link">Typography Presets</a></li>
-        <li><a href="#compare" class="nav-item-link">Comparison</a></li>
-        <li><a href="#downloads" class="nav-item-link">Downloads</a></li>
-        <li><a href="#faq" class="nav-item-link">FAQ</a></li>
-        <li><a href="https://github.com/Raymond0385/YT/blob/main/DOCUMENTATION.md" target="_blank" rel="noopener" class="nav-item-link">Docs</a></li>
-      </ul>
-
-      <div class="nav-actions-group">
-        <a href="https://github.com/Raymond0385/YT" target="_blank" rel="noopener" class="btn-nav-ghost">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-          </svg>
-          <span>Star</span>
-        </a>
-        <a href="#downloads" class="btn-nav-cta">
-          <span>Get Free</span>
-        </a>
-        <button id="mobileMenuBtn" class="mobile-menu-toggle" aria-label="Toggle Navigation">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-        </button>
-      </div>
-    </div>
-
-    <!-- Mobile Navigation Drawer -->
-    <div id="mobileDrawer" class="mobile-drawer">
-      <a href="#features" class="mobile-nav-link">Features</a>
-      <a href="#presets" class="mobile-nav-link">Typography Presets</a>
-      <a href="#compare" class="mobile-nav-link">Comparison</a>
-      <a href="#downloads" class="mobile-nav-link">Downloads</a>
-      <a href="#faq" class="mobile-nav-link">FAQ</a>
-      <a href="https://github.com/Raymond0385/YT" target="_blank" rel="noopener" style="color: var(--accent);">View GitHub Repo →</a>
-    </div>
+  <header class="top">
+    <a class="brand" href="#top" aria-label="Kadr">
+      <img src="./assets/logo.png" alt="" width="32" height="32">
+      <span>Kadr</span>
+    </a>
+    <nav aria-label="Main">
+      <a href="#features" data-i18n="nav_features">Features</a>
+      <a href="#download" data-i18n="nav_download">Download</a>
+      <a href="#faq" data-i18n="nav_faq">FAQ</a>
+      <a href="https://github.com/Raymond0385/YT" rel="noopener">GitHub</a>
+    </nav>
+    <button class="lang" id="langBtn" type="button" aria-label="Language">RU</button>
   </header>
 
-  <!-- Hero Section (Typography-Driven, No Fake Mockups) -->
-  <section class="hero-section">
-    <div class="hero-ambient-glow"></div>
-
-    <div class="container">
-      <div class="hero-pill-badge">
-        <span class="pill-status-dot"></span>
-        <span>Kadr v1.1.4 is Live • 100% Free & Open-Source</span>
+  <main id="top">
+    <section class="hero">
+      <img class="hero-icon" src="./assets/logo.png" alt="Kadr icon" width="112" height="112">
+      <h1 data-i18n="hero_title">Shorts from long videos, on your own computer</h1>
+      <p class="lead" data-i18n="hero_lead">Kadr makes captions with word-level timing, finds the best moments, removes dead air and exports vertical video. Speech recognition runs locally.</p>
+      <div class="cta">
+        <a class="btn primary" id="heroDownload" href="https://github.com/Raymond0385/YT/releases/latest" data-i18n="hero_cta">Download for Windows</a>
+        <a class="btn" href="#features" data-i18n="hero_more">See what it does</a>
       </div>
+      <p class="fine" id="heroVersion"></p>
+    </section>
 
-      <h1 class="hero-heading">
-        Turn Long Videos into Viral Shorts 10x Faster.<br>
-        <span class="heading-gradient">Auto Subtitles. Zero Subscription.</span>
-      </h1>
-
-      <p class="hero-description">
-        The high-performance desktop alternative to Opus Clip, Submagic, and CapCut Pro. Word-accurate animated captions in ~3 seconds, automated viral clip extraction, and zero watermarks — running 100% locally on your machine.
-      </p>
-
-      <!-- Sleek Pill-Shaped CTA Row -->
-      <div class="hero-cta-container">
-        <a href="https://github.com/Raymond0385/YT/releases/latest" class="btn-primary-action">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
-          </svg>
-          <span>Download for Windows (.exe)</span>
-        </a>
-
-        <a href="https://github.com/Raymond0385/YT/releases/latest" class="btn-secondary-action">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.61-.75 1.04-1.8 1.01-2.87-.96.04-2.16.65-2.84 1.45-.58.67-1.11 1.74-1.01 2.8 1.09.08 2.23-.58 2.84-1.38z"/>
-          </svg>
-          <span>Download for Mac (.dmg)</span>
-        </a>
-
-        <a href="https://github.com/Raymond0385/YT" target="_blank" rel="noopener" class="btn-secondary-action">
-          <span>GitHub Source</span>
-        </a>
+    <section id="features" class="block">
+      <h2 data-i18n="feat_title">What it does</h2>
+      <div class="grid">
+        <article>
+          <h3 data-i18n="f1_t">Captions with timing</h3>
+          <p data-i18n="f1_p">Speech recognition with a timestamp for every word. Local Whisper models, or Groq in the cloud with your own key. English, Russian and many other languages.</p>
+        </article>
+        <article>
+          <h3 data-i18n="f2_t">Fix what it misheard</h3>
+          <p data-i18n="f2_p">Words the recognizer was unsure about are highlighted. A glossary fixes names and terms. Paste the correct script and the captions keep their timing.</p>
+        </article>
+        <article>
+          <h3 data-i18n="f3_t">Shorts from long videos</h3>
+          <p data-i18n="f3_p">Finds self-contained 25–60 second highlights in English, Russian and romanized Urdu/Hindi. Trim, rename, add or delete them by hand.</p>
+        </article>
+        <article>
+          <h3 data-i18n="f4_t">Same look in preview and export</h3>
+          <p data-i18n="f4_p">Over 100 subtitle styles. Fonts, outline, shadow, boxes and the emoji above the text are rendered into the video exactly as you see them.</p>
+        </article>
+        <article>
+          <h3 data-i18n="f5_t">A real editor</h3>
+          <p data-i18n="f5_p">Timeline with every word editable, razor, removal of silence, B-roll from Pexels (your key), undo and redo.</p>
+        </article>
+        <article>
+          <h3 data-i18n="f6_t">Projects and YouTube</h3>
+          <p data-i18n="f6_p">Save the whole session to a .kadr file and continue later. Import a video you have the right to use straight from a YouTube link.</p>
+        </article>
       </div>
+    </section>
 
-      <!-- Clean Responsive 3-Column Live Metric Ribbon (Replacing Fake Mockups) -->
-      <div class="hero-metric-ribbon">
-        <div class="metric-card-box">
-          <div class="metric-number-bold highlight">0.00s</div>
-          <div class="metric-title-label">Cloud Latency</div>
-          <p class="metric-desc-text">100% offline local processing on your CPU/GPU. Zero queues, zero third-party data uploads.</p>
-        </div>
+    <section class="block narrow">
+      <h2 data-i18n="how_title">How it works</h2>
+      <ol class="steps">
+        <li><b data-i18n="s1_t">Open a video</b><span data-i18n="s1_p">from your disk or a YouTube link.</span></li>
+        <li><b data-i18n="s2_t">Generate captions</b><span data-i18n="s2_p">choose a language and an engine, then correct the highlighted words.</span></li>
+        <li><b data-i18n="s3_t">Pick or cut a short</b><span data-i18n="s3_p">take a suggested highlight or mark your own.</span></li>
+        <li><b data-i18n="s4_t">Export</b><span data-i18n="s4_p">the file goes to the folder you choose. Your GPU encoder is used when there is one.</span></li>
+      </ol>
+    </section>
 
-        <div class="metric-card-box">
-          <div class="metric-number-bold">~2–3s</div>
-          <div class="metric-title-label">Transcription Speed</div>
-          <p class="metric-desc-text">Powered by Whisper Large-v3 turbo engine with instant millisecond word synchronization.</p>
-        </div>
-
-        <div class="metric-card-box">
-          <div class="metric-number-bold highlight">$0</div>
-          <div class="metric-title-label">Forever Free</div>
-          <p class="metric-desc-text">Zero subscriptions, zero watermarks, and unlimited exports. MIT Open-Source software.</p>
-        </div>
+    <section id="download" class="block">
+      <h2 data-i18n="dl_title">Download</h2>
+      <p class="muted" id="dlNote" data-i18n="dl_note">Python, FFmpeg and the speech engine are bundled. Nothing else to install.</p>
+      <div class="downloads" id="downloads">
+        <a class="btn primary" href="https://github.com/Raymond0385/YT/releases/latest" data-i18n="dl_all">All downloads on GitHub</a>
       </div>
+      <p class="fine" id="dlVersion"></p>
+    </section>
 
-      <div class="hero-trust-row">
-        <div class="trust-item">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          <span>No Subscriptions ($0 Forever)</span>
-        </div>
-        <div class="trust-item">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          <span>Zero Watermarks</span>
-        </div>
-        <div class="trust-item">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          <span>Runs On Your Machine</span>
-        </div>
-        <div class="trust-item">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          <span>16x Fast NVENC GPU</span>
-        </div>
-      </div>
+    <section id="faq" class="block narrow">
+      <h2 data-i18n="faq_title">Questions</h2>
+      <details>
+        <summary data-i18n="q1">Is my video uploaded anywhere?</summary>
+        <p data-i18n="a1">No. Recognition and rendering happen on your computer. The only exception is the optional Groq engine, which receives the audio when you add your own Groq key. There is no analytics server in the app.</p>
+      </details>
+      <details>
+        <summary data-i18n="q2">Does it need a graphics card?</summary>
+        <p data-i18n="a2">No. A graphics card makes recognition and export faster, but everything also works on the processor. The larger offline models download once on first use (about 1.5 GB for Turbo).</p>
+      </details>
+      <details>
+        <summary data-i18n="q3">Can I download from YouTube?</summary>
+        <p data-i18n="a3">The import tab downloads a link into the editor. Use it only for videos you own or have permission to use; the rules of YouTube apply.</p>
+      </details>
+      <details>
+        <summary data-i18n="q4">How do updates work?</summary>
+        <p data-i18n="a4">The app checks this repository's releases (Settings → Updates) and downloads the new installer when there is one.</p>
+      </details>
+      <details>
+        <summary data-i18n="q5">What is the license?</summary>
+        <p data-i18n="a5">The code is MIT licensed. Kadr started from the open-source CapShorts by Ali Raza; the original notice is kept in the repository.</p>
+      </details>
+    </section>
+  </main>
 
-    </div>
-  </section>
-
-  <!-- Features Section (Micro-UI Bento Grid) -->
-  <section id="features" class="section-spacer">
-    <div class="container">
-      <div class="section-header-centered">
-        <span class="section-eyebrow-tag">Architecture & Features</span>
-        <h2 class="section-main-heading">Engineered for Speed, Privacy, and Virality</h2>
-        <p class="section-subtitle-text">
-          Zero manual typing. Zero recurring fees. A high-performance desktop studio built for short-form video creators.
-        </p>
-      </div>
-
-      <div class="bento-grid">
-        
-        <!-- Bento 1 (Large 8-col): Speech Engine -->
-        <div class="bento-card bento-col-8">
-          <div class="micro-ui-frame">
-            <div class="micro-waveform-row">
-              <div class="micro-wave-bar" style="height: 35%;"></div>
-              <div class="micro-wave-bar active" style="height: 70%;"></div>
-              <div class="micro-wave-bar active" style="height: 95%;"></div>
-              <div class="micro-wave-bar active" style="height: 60%;"></div>
-              <div class="micro-wave-bar active" style="height: 85%;"></div>
-              <div class="micro-wave-bar" style="height: 40%;"></div>
-              <div class="micro-wave-bar active" style="height: 90%;"></div>
-              <div class="micro-wave-bar active" style="height: 75%;"></div>
-              <div class="micro-wave-bar active" style="height: 100%;"></div>
-              <div class="micro-wave-bar" style="height: 30%;"></div>
-              <div class="micro-wave-bar" style="height: 50%;"></div>
-            </div>
-            <div class="micro-tokens-stream">
-              <span class="token-pill">00:01.20</span>
-              <span class="token-pill">Stop</span>
-              <span class="token-pill">paying</span>
-              <span class="token-pill highlight">$30/MONTH ★</span>
-              <span class="token-pill">for</span>
-              <span class="token-pill highlight">CAPTION APPS ★</span>
-              <span class="token-pill">00:03.45</span>
-            </div>
-          </div>
-          <div>
-            <h3 class="bento-card-title">Word-Accurate AI Subtitles in ~3 Seconds</h3>
-            <p class="bento-card-desc">
-              Powered by Whisper Large-v3 turbo cloud engine with instant millisecond timestamps and automatic fallback to on-device Faster-Whisper when offline. Includes smart viral keyword auto-highlighting.
-            </p>
-          </div>
-        </div>
-
-        <!-- Bento 2 (4-col): Shorts Detection -->
-        <div class="bento-card bento-col-4">
-          <div class="micro-ui-frame">
-            <div class="virality-meter-box" style="margin-bottom: 0.75rem;">
-              <span style="font-size: 0.8rem; color: var(--text-secondary);">Engagement Index</span>
-              <span class="score-badge">98% VIRAL</span>
-            </div>
-            <div class="virality-meter-box">
-              <span style="font-size: 0.8rem; color: var(--text-secondary);">Sentence Boundary</span>
-              <span style="font-family: var(--font-mono); font-size: 0.75rem; color: #a5b4fc;">COMPLETE</span>
-            </div>
-          </div>
-          <div>
-            <h3 class="bento-card-title">Opus-Style Viral Shorts</h3>
-            <p class="bento-card-desc">
-              Drop any 10–60 minute podcast. Kadr extracts 25s–60s highlight clips that never cut off mid-sentence.
-            </p>
-          </div>
-        </div>
-
-        <!-- Bento 3 (4-col): 100+ Creator Presets -->
-        <div class="bento-card bento-col-4">
-          <div class="micro-ui-frame" style="display: flex; flex-direction: column; gap: 0.5rem; align-items: center; justify-content: center; height: 115px;">
-            <span style="font-weight: 800; font-size: 1.1rem; color: #facc15;">★ MRBEAST YELLOW POP</span>
-            <span style="font-family: Georgia, serif; font-style: italic; color: #ffffff;">Vox Editorial Highlight</span>
-            <span style="font-family: var(--font-mono); font-size: 0.85rem; color: #38bdf8;">NEON CYBERPUNK 2077</span>
-          </div>
-          <div>
-            <h3 class="bento-card-title">100+ Creator Presets</h3>
-            <p class="bento-card-desc">
-              Hormozi, MrBeast, Vox, Ali Abdaal, and Neon Cyberpunk with fluid word-by-word karaoke wipes and physics.
-            </p>
-          </div>
-        </div>
-
-        <!-- Bento 4 (4-col): CapCut Timeline -->
-        <div class="bento-card bento-col-4">
-          <div class="micro-ui-frame" style="display: flex; flex-direction: column; gap: 0.5rem;">
-            <div style="display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted);">
-              <span>RAZOR TOOL [B]</span>
-              <span style="color: #10b981;">ACTIVE</span>
-            </div>
-            <div style="background: rgba(255,255,255,0.06); height: 26px; border-radius: 4px; display: flex; align-items: center; padding: 0 0.5rem; justify-content: space-between;">
-              <span style="font-size: 0.7rem; color: #a1a1aa;">Track 1 (Video Split)</span>
-              <span style="font-size: 0.65rem; background: var(--accent); color: white; padding: 1px 4px; border-radius: 3px;">00:04.2</span>
-            </div>
-            <div style="background: rgba(255,255,255,0.04); height: 26px; border-radius: 4px; display: flex; align-items: center; padding: 0 0.5rem;">
-              <span style="font-size: 0.7rem; color: var(--emerald);">1-Click Silence Cut Applied</span>
-            </div>
-          </div>
-          <div>
-            <h3 class="bento-card-title">Desktop Timeline Studio</h3>
-            <p class="bento-card-desc">
-              CapCut-inspired timeline. Slice video with Razor blade tool (`B`) and ripple-delete silence dead-air instantly.
-            </p>
-          </div>
-        </div>
-
-        <!-- Bento 5 (4-col): Hardware GPU Render -->
-        <div class="bento-card bento-col-4">
-          <div class="micro-ui-frame" style="display: flex; flex-direction: column; justify-content: center; gap: 0.75rem; height: 115px;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <span style="font-size: 0.8rem; color: var(--text-secondary);">NVENC / AMF Pipeline</span>
-              <span class="score-badge">16x SPEED</span>
-            </div>
-            <div style="background: rgba(255,255,255,0.06); height: 8px; border-radius: 9999px; overflow: hidden;">
-              <div style="width: 100%; height: 100%; background: linear-gradient(90deg, #6366f1, #10b981);"></div>
-            </div>
-            <span style="font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); text-align: right;">5-10s Total Render Time</span>
-          </div>
-          <div>
-            <h3 class="bento-card-title">16x Hardware GPU Export</h3>
-            <p class="bento-card-desc">
-              Hardware-accelerated rendering using NVIDIA NVENC, Intel QuickSync, AMD AMF, and Apple VideoToolbox.
-            </p>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  </section>
-
-  <!-- Interactive Typographic Preset Switcher (No Phone Frames, Pure Dynamic Typography) -->
-  <section id="presets" class="section-spacer preset-section-wrap" style="background: #060608;">
-    <div class="container">
-      <div class="section-header-centered">
-        <span class="section-eyebrow-tag">Pure Typographic Engine</span>
-        <h2 class="section-main-heading">Live Animated Subtitle Presets</h2>
-        <p class="section-subtitle-text">
-          Select a preset tab below to see high-impact animated typography morph in real time.
-        </p>
-      </div>
-
-      <div class="preset-card-container">
-        <div class="preset-switcher-box">
-          <!-- Preset Selector Pills on Top -->
-          <div class="preset-pills-row">
-            <button class="preset-pill-btn active" data-preset="mrbeast">
-              <span>🔴 MrBeast Pop</span>
-            </button>
-            <button class="preset-pill-btn" data-preset="hormozi">
-              <span>🟡 Hormozi Box</span>
-            </button>
-            <button class="preset-pill-btn" data-preset="vox">
-              <span>✒️ Vox Editorial</span>
-            </button>
-            <button class="preset-pill-btn" data-preset="neon">
-              <span>⚡ Neon Cyberpunk</span>
-            </button>
-          </div>
-
-          <!-- Large Bold Dynamic Animated Quote Display -->
-          <div class="typography-stage-area">
-            <div id="dynamicTypographyQuote" class="preset-mrbeast-pop">
-              UNLOCK <span style="color: #facc15;">MILLIONS</span> OF VIEWS WITH AI
-            </div>
-          </div>
-
-          <!-- Preset Metadata Bar -->
-          <div class="preset-footer-bar">
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <span class="pill-status-dot"></span>
-              <span id="presetActiveLabel">MrBeast Pop — Punchy bounce scale with dynamic red stroke</span>
-            </div>
-            <button id="btnMorphCycle" style="background: none; border: 1px solid var(--border-subtle); color: var(--accent); padding: 0.35rem 0.85rem; border-radius: 6px; font-family: var(--font-mono); font-size: 0.72rem; cursor: pointer;">
-              CYCLE PHRASE ↻
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Comparison Section -->
-  <section id="compare" class="section-spacer">
-    <div class="container">
-      <div class="section-header-centered">
-        <span class="section-eyebrow-tag">Value Comparison</span>
-        <h2 class="section-main-heading">Stop Overpaying for Cloud Video Tools</h2>
-        <p class="section-subtitle-text">
-          Compare Kadr against costly subscription SaaS alternatives.
-        </p>
-      </div>
-
-      <!-- Mobile Swipe Hint -->
-      <div class="table-swipe-hint">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
-        <span>Swipe horizontally to compare features</span>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-      </div>
-
-      <div class="compare-table-wrapper">
-        <table class="clean-table">
-          <thead>
-            <tr>
-              <th>Feature</th>
-              <th class="col-brand-highlight">⚡ Kadr</th>
-              <th>Opus Clip</th>
-              <th>Submagic</th>
-              <th>CapCut Pro</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><strong>Price</strong></td>
-              <td class="col-brand-highlight text-success">100% Free Forever (MIT)</td>
-              <td class="text-dimmed">$19 – $49 / mo</td>
-              <td class="text-dimmed">$20 – $50 / mo</td>
-              <td class="text-dimmed">$10 – $15 / mo</td>
-            </tr>
-            <tr>
-              <td><strong>Watermarks</strong></td>
-              <td class="col-brand-highlight text-success">Zero (Never)</td>
-              <td class="text-dimmed">Watermarked on Free</td>
-              <td class="text-dimmed">Watermarked on Free</td>
-              <td class="text-dimmed">Paid Only</td>
-            </tr>
-            <tr>
-              <td><strong>Export Limits</strong></td>
-              <td class="col-brand-highlight text-success">Unlimited Forever</td>
-              <td class="text-dimmed">60 mins / month</td>
-              <td class="text-dimmed">3 videos / month</td>
-              <td class="text-dimmed">Pro Limits</td>
-            </tr>
-            <tr>
-              <td><strong>Offline Privacy</strong></td>
-              <td class="col-brand-highlight text-success">100% Local on Device</td>
-              <td class="text-dimmed">Cloud Server Only</td>
-              <td class="text-dimmed">Cloud Server Only</td>
-              <td class="text-dimmed">Cloud Connected</td>
-            </tr>
-            <tr>
-              <td><strong>Transcription Speed</strong></td>
-              <td class="col-brand-highlight text-success">~2–3 Seconds (Turbo)</td>
-              <td class="text-dimmed">2–5 Minutes</td>
-              <td class="text-dimmed">1–3 Minutes</td>
-              <td class="text-dimmed">1–2 Minutes</td>
-            </tr>
-            <tr>
-              <td><strong>Hardware NVENC GPU</strong></td>
-              <td class="col-brand-highlight text-success">Native GPU Export</td>
-              <td class="text-dimmed">Server Queue</td>
-              <td class="text-dimmed">Server Queue</td>
-              <td class="text-dimmed">Standard</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
-  <!-- Downloads Hub Section -->
-  <section id="downloads" class="section-spacer" style="background: #060608;">
-    <div class="container">
-      <div class="section-header-centered">
-        <span class="section-eyebrow-tag">Official Releases</span>
-        <h2 class="section-main-heading">Download Kadr v1.1.4</h2>
-        <p class="section-subtitle-text">
-          Standalone desktop installers with bundled Python daemon and FFmpeg. Zero terminal setup required.
-        </p>
-      </div>
-
-      <div class="download-cards-flex">
-        
-        <!-- Windows Setup Card -->
-        <div id="dl-card-win" class="dl-card-minimal featured">
-          <div>
-            <h3 class="dl-platform-name">Windows</h3>
-            <div class="dl-meta-tag">Setup Installer (.exe) • 64-bit</div>
-            
-            <ul class="dl-specs-list">
-              <li>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                Windows 10 / 11 (x86_64)
-              </li>
-              <li>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                NVENC / AMF / QuickSync GPU
-              </li>
-              <li>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                Zero extra dependencies
-              </li>
-            </ul>
-          </div>
-
-          <a href="https://github.com/Raymond0385/YT/releases/latest" class="btn-download-solid">
-            <span>Download Setup (.exe)</span>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          </a>
-        </div>
-
-        <!-- Windows MSI Card -->
-        <div class="dl-card-minimal">
-          <div>
-            <h3 class="dl-platform-name">Windows MSI</h3>
-            <div class="dl-meta-tag">Enterprise Package (.msi) • 64-bit</div>
-            
-            <ul class="dl-specs-list">
-              <li>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                Enterprise / System-wide deploy
-              </li>
-              <li>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                Silent deployment support
-              </li>
-              <li>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                SHA-256 verified binary
-              </li>
-            </ul>
-          </div>
-
-          <a href="https://github.com/Raymond0385/YT/releases/latest" class="btn-download-solid">
-            <span>Download MSI (.msi)</span>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          </a>
-        </div>
-
-        <!-- macOS Universal Card -->
-        <div id="dl-card-mac" class="dl-card-minimal">
-          <div>
-            <h3 class="dl-platform-name">macOS</h3>
-            <div class="dl-meta-tag">Universal Disk Image (.dmg)</div>
-            
-            <ul class="dl-specs-list">
-              <li>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                Apple Silicon (M1 / M2 / M3 / M4)
-              </li>
-              <li>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                Intel Mac compatible (Universal)
-              </li>
-              <li>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                Apple VideoToolbox GPU acceleration
-              </li>
-            </ul>
-          </div>
-
-          <a href="https://github.com/Raymond0385/YT/releases/latest" class="btn-download-solid">
-            <span>Download DMG (.dmg)</span>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          </a>
-        </div>
-
-      </div>
-
-      <!-- Quick Developer Terminal Snippet -->
-      <div style="margin-top: 3.5rem; text-align: center;">
-        <span style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.15em; display: block; margin-bottom: 0.75rem;">
-          Build From Source / Local Development
-        </span>
-        <div style="display: inline-flex; align-items: center; background: #121215; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 0.5rem 1rem; gap: 1rem; max-width: 100%; overflow-x: auto;">
-          <code style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-primary); white-space: nowrap;">git clone https://github.com/Raymond0385/YT.git</code>
-          <button id="btnCopyGit" style="background: none; border: none; cursor: pointer; color: var(--accent); font-family: var(--font-mono); font-size: 0.75rem; font-weight: 600;">COPY</button>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- FAQ Section (Positioned Cleanly Below Downloads Hub) -->
-  <section id="faq" class="section-spacer">
-    <div class="container">
-      <div class="section-header-centered">
-        <span class="section-eyebrow-tag">Knowledge Base</span>
-        <h2 class="section-main-heading">Frequently Asked Questions</h2>
-      </div>
-
-      <div class="faq-list-clean">
-        <div class="faq-row-item">
-          <button class="faq-trigger-btn">
-            <span>Is Kadr really 100% free with no watermarks?</span>
-            <span class="faq-toggle-icon">+</span>
-          </button>
-          <div class="faq-body-content">
-            Yes. Kadr is released under the MIT Open Source License. There are zero subscriptions, zero export restrictions, and zero watermarks. You own 100% of your exported videos for personal and commercial use.
-          </div>
-        </div>
-
-        <div class="faq-row-item">
-          <button class="faq-trigger-btn">
-            <span>Do I need to install Python, Git, or FFmpeg?</span>
-            <span class="faq-toggle-icon">+</span>
-          </button>
-          <div class="faq-body-content">
-            No. Kadr is a completely self-contained desktop app. The compiled Python daemon, local Faster-Whisper AI engine, and portable FFmpeg binaries are pre-packaged inside the installer.
-          </div>
-        </div>
-
-        <div class="faq-row-item">
-          <button class="faq-trigger-btn">
-            <span>Can I run Kadr completely offline without internet?</span>
-            <span class="faq-toggle-icon">+</span>
-          </button>
-          <div class="faq-body-content">
-            Yes. Kadr features an offline on-device speech engine powered by Faster-Whisper. If you have no internet access, it automatically falls back to local CPU or GPU transcription.
-          </div>
-        </div>
-
-        <div class="faq-row-item">
-          <button class="faq-trigger-btn">
-            <span>Which languages are supported for subtitle transcription?</span>
-            <span class="faq-toggle-icon">+</span>
-          </button>
-          <div class="faq-body-content">
-            Over 90 languages are supported with millisecond timestamps, including English, Urdu (Nastaliq & Roman), Hindi, Spanish, Arabic, French, German, Japanese, and more.
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Manifesto Section -->
-  <section class="section-spacer" style="padding-top: 0;">
-    <div class="container">
-      <div class="manifesto-box">
-        <blockquote class="manifesto-quote">
-          “Create without limits. Zero subscriptions, zero watermarks, 100% on your machine.”
-        </blockquote>
-        <div class="manifesto-author">
-          // Kadr Manifesto — The Open Media Movement
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Minimalist Footer (Real Logo Integration) -->
-  <footer class="site-footer">
-    <div class="container">
-      <div class="footer-top-row">
-        <div class="footer-brand-wrap">
-          <img src="./assets/logo.png" alt="Kadr Logo" class="brand-logo-img">
-          <span style="font-weight: 700; color: var(--text-primary); font-size: 1.1rem;">Kadr</span>
-          <span style="color: var(--text-muted);">— Open-Source AI Video Editor</span>
-        </div>
-
-        <div class="footer-links-group">
-          <a href="https://github.com/Raymond0385/YT" target="_blank" rel="noopener" class="footer-link-item">GitHub</a>
-          <a href="https://github.com/Raymond0385/YT/blob/main/DOCUMENTATION.md" target="_blank" rel="noopener" class="footer-link-item">Documentation</a>
-          <a href="https://github.com/Raymond0385/YT/releases/tag/v1.1.4" target="_blank" rel="noopener" class="footer-link-item">Release v1.1.4</a>
-          <a href="https://github.com/Raymond0385/YT/blob/main/LICENSE" target="_blank" rel="noopener" class="footer-link-item">MIT License</a>
-        </div>
-      </div>
-
-      <div class="footer-bottom-row">
-        <span>© 2026 Ali Raza & Kadr Contributors. Free for personal & commercial use.</span>
-        <span>Crafted for high-performance creators.</span>
-      </div>
-    </div>
+  <footer>
+    <span>Kadr</span>
+    <a href="https://github.com/Raymond0385/YT" rel="noopener">GitHub</a>
+    <a href="https://github.com/Raymond0385/YT/blob/main/CHANGELOG.md" rel="noopener" data-i18n="foot_changes">Changelog</a>
+    <a href="https://github.com/Raymond0385/YT/issues" rel="noopener" data-i18n="foot_issues">Report a problem</a>
   </footer>
 
   <script src="./app.js"></script>
