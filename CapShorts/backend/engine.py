@@ -39,6 +39,7 @@ from fastapi.responses import JSONResponse, FileResponse
 
 from subtitle_gen import generate_ass_subtitles, generate_srt_subtitles, generate_vtt_subtitles, compute_layout
 import emoji_overlay as eo
+import groq_chunks as gc
 from broll import search_pexels_videos, download_broll_clip, build_ffmpeg_broll_filter
 from clip_generator import detect_viral_clips
 from groq_transcribe import transcribe_with_groq_pool
@@ -97,6 +98,17 @@ def probe_video_dimensions(video_path: str) -> Tuple[int, int]:
     except Exception as e:
         print(f"[engine] probe_video_dimensions error: {e}")
     return 1080, 1920
+
+def probe_media_duration(path: str) -> float:
+    """Duration in seconds of an audio/video file (0.0 if it cannot be read)."""
+    try:
+        out = subprocess.check_output(
+            [get_ffprobe_bin(), "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+            stderr=subprocess.PIPE, text=True, timeout=30, **SUBPROCESS_EXTRA_KWARGS).strip()
+        return float(out) if out else 0.0
+    except Exception as e:
+        print(f"[engine] probe_media_duration error: {e}")
+        return 0.0
 
 LOCAL_ALLOWED_ORIGINS = ["*"]
 
@@ -618,7 +630,7 @@ def run_transcribe_job(
                     "-ar", "16000", "-ac", "1", "-b:a", "32k",
                     audio_mp3
                 ]
-                subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120, **SUBPROCESS_EXTRA_KWARGS)
+                subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=900, **SUBPROCESS_EXTRA_KWARGS)
 
                 update_task_state(TRANSCRIBE_JOBS, task_id, {
                     "progress": 55,
@@ -626,7 +638,21 @@ def run_transcribe_job(
                     "status": "processing"
                 })
 
-                words_result, dur, detected_lang = transcribe_with_groq_pool(audio_mp3, key_pool, language, prompt=glossary_prompt(glossary))
+                audio_seconds = probe_media_duration(audio_mp3)
+                audio_bytes = os.path.getsize(audio_mp3) if os.path.exists(audio_mp3) else 0
+                if gc.needs_chunking(audio_seconds, audio_bytes):
+                    # Long recording: Groq limits the file size, so it is sent in chunks cut at pauses
+                    def on_chunk(done: int, total: int):
+                        update_task_state(TRANSCRIBE_JOBS, task_id, {
+                            "progress": 55 + int(30 * done / max(1, total)),
+                            "step": f"⚡ Cloud: transcribing part {min(done + 1, total)} of {total}...",
+                            "status": "processing"
+                        })
+                    words_result, dur, detected_lang = gc.run_chunked(
+                        audio_mp3, audio_seconds, ffmpeg_bin, key_pool, language, glossary_prompt(glossary),
+                        TEMP_DIR, task_id, progress=on_chunk)
+                else:
+                    words_result, dur, detected_lang = transcribe_with_groq_pool(audio_mp3, key_pool, language, prompt=glossary_prompt(glossary))
                 words_result = tag_keywords(clean_transcript(words_result, glossary))
 
                 update_task_state(TRANSCRIBE_JOBS, task_id, {
