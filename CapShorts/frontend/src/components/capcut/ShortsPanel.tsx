@@ -1,10 +1,14 @@
-import React, { useState } from 'react';
-import { Scissors, Flame, Pencil, Trash2, Plus, Crosshair } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { Scissors, Flame, Pencil, Trash2, Plus, Crosshair, FolderOpen, Layers } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { useVideoStore } from '../../store/useVideoStore';
 import { apiUrl } from '../../config';
 import { formatTime } from '../../utils/timeFormat';
 import { snapToWord } from '../../utils/clipEdit';
+import { buildExportPayload, shortFileName } from '../../utils/exportPayload';
+import { batchSummary, BatchItem, runBatchExport } from '../../utils/batchExport';
+import templatesData from '../../data/templates.json';
+import { SubtitlePreset } from '../../types';
 
 const inputCls =
   'bg-zinc-950/80 border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 transition-colors';
@@ -15,6 +19,7 @@ export const ShortsPanel: React.FC = () => {
   const {
     clips, selectedClipId, selectClip, setClips, updateClip, deleteClip, addClip,
     transcript, duration, currentTime, setCurrentTime, setIsExportModalOpen,
+    videoFile, serverVideoPath, activeTemplateId, customStyleOverrides, brollList, showEmojis,
   } = useVideoStore(
     useShallow((s) => ({
       clips: s.clips,
@@ -29,6 +34,12 @@ export const ShortsPanel: React.FC = () => {
       currentTime: s.currentTime,
       setCurrentTime: s.setCurrentTime,
       setIsExportModalOpen: s.setIsExportModalOpen,
+      videoFile: s.videoFile,
+      serverVideoPath: s.serverVideoPath,
+      activeTemplateId: s.activeTemplateId,
+      customStyleOverrides: s.customStyleOverrides,
+      brollList: s.brollList,
+      showEmojis: s.showEmojis,
     }))
   );
 
@@ -40,6 +51,67 @@ export const ShortsPanel: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+
+  // ---- batch export of all shorts
+  const [batchItems, setBatchItems] = useState<BatchItem[]>([]);
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchDir, setBatchDir] = useState('');
+  const stopRef = useRef(false);
+
+  const exportAll = async () => {
+    if (!clips.length || batchRunning) return;
+    if (!videoFile && !serverVideoPath) {
+      setNote('Open a video first.');
+      return;
+    }
+    setNote(null);
+    setBatchRunning(true);
+    stopRef.current = false;
+    setBatchItems(clips.map((c) => ({ clipId: c.id, title: c.title, status: 'queued', progress: 0 })));
+    try {
+      fetch(apiUrl('/api/export/settings')).then((r) => (r.ok ? r.json() : null)).then((d) => d?.export_dir && setBatchDir(d.export_dir)).catch(() => undefined);
+
+      // the engine renders from its own copy of the video: send it once
+      let videoPath = serverVideoPath;
+      if (!videoPath && videoFile) {
+        const form = new FormData();
+        form.append('file', videoFile);
+        const up = await fetch(apiUrl('/api/upload-video'), { method: 'POST', body: form });
+        if (!up.ok) throw new Error('Could not send the video to the render engine');
+        videoPath = (await up.json()).video_path;
+        useVideoStore.setState({ serverVideoPath: videoPath });
+      }
+
+      const presets = templatesData as SubtitlePreset[];
+      const preset = presets.find((p) => p.id === activeTemplateId) || presets[0];
+      const list = [...clips].sort((a, b) => a.start - b.start);
+      await runBatchExport({
+        clips: list,
+        buildPayload: (clip, index) =>
+          buildExportPayload({
+            videoPath, transcript, preset, customStyleOverrides, brollList, showEmojis,
+            outputFilename: shortFileName(index, clip.title, list.length),
+            resolution: '1080x1920',
+            clip,
+          }),
+        onUpdate: setBatchItems,
+        shouldStop: () => stopRef.current,
+      });
+    } catch (e: any) {
+      setNote(e?.message || 'Batch export failed');
+    } finally {
+      setBatchRunning(false);
+    }
+  };
+
+  const openExportFolder = async () => {
+    try {
+      const r = await fetch(apiUrl('/api/export/open-folder'), { method: 'POST' });
+      if (!r.ok) setNote('Could not open the folder');
+    } catch {
+      setNote('Could not reach the engine');
+    }
+  };
 
   const maybeSnap = (t: number, edge: 'start' | 'end') => (snap && transcript.length ? snapToWord(transcript, t, edge) : t);
 
@@ -142,12 +214,75 @@ export const ShortsPanel: React.FC = () => {
           <Plus className="w-3.5 h-3.5" />
           <span>New short at playhead</span>
         </button>
+        <button
+          onClick={exportAll}
+          disabled={!clips.length || batchRunning}
+          className="flex items-center space-x-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-indigo-500/15 border border-indigo-500/40 text-indigo-200 hover:bg-indigo-500/25 transition-colors disabled:opacity-40"
+          data-testid="export-all"
+          title="Render every short into the export folder"
+        >
+          <Layers className="w-3.5 h-3.5" />
+          <span>Export all ({clips.length})</span>
+        </button>
         <label className="flex items-center space-x-1.5 text-[10px] text-zinc-400 cursor-pointer">
           <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} className="accent-indigo-500" />
           <span>Snap to words</span>
         </label>
       </div>
       {note && <p className="text-[10px] text-zinc-400">{note}</p>}
+
+      {batchItems.length > 0 && (
+        <div className="p-3 rounded-2xl bg-zinc-900/70 border border-white/[0.08] space-y-2" data-testid="batch-panel">
+          {(() => {
+            const sum = batchSummary(batchItems);
+            return (
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="font-semibold text-white" data-testid="batch-summary">
+                  {batchRunning
+                    ? `Exporting ${sum.done + sum.failed + 1 > sum.total ? sum.total : sum.done + sum.failed + 1} of ${sum.total}...`
+                    : `Done: ${sum.done} saved${sum.failed ? `, ${sum.failed} failed` : ''}${sum.skipped ? `, ${sum.skipped} skipped` : ''}`}
+                </span>
+                {batchRunning && (
+                  <button onClick={() => { stopRef.current = true; }} className="text-red-300 hover:text-red-200 underline" data-testid="batch-stop">
+                    Stop after this one
+                  </button>
+                )}
+              </div>
+            );
+          })()}
+          <ul className="space-y-1.5">
+            {batchItems.map((it) => (
+              <li key={it.clipId} className="text-[10px]" data-testid="batch-row" data-status={it.status}>
+                <div className="flex items-center justify-between">
+                  <span className="truncate max-w-[190px] text-zinc-300">{it.title}</span>
+                  <span className={
+                    it.status === 'done' ? 'text-emerald-400' : it.status === 'failed' ? 'text-red-400' :
+                    it.status === 'rendering' ? 'text-indigo-300' : 'text-zinc-500'
+                  }>
+                    {it.status === 'rendering' ? `${it.progress}%` : it.status}
+                  </span>
+                </div>
+                {it.status === 'rendering' && (
+                  <div className="h-1 mt-1 rounded-full bg-zinc-800 overflow-hidden">
+                    <div className="h-full bg-indigo-400 transition-all" style={{ width: `${it.progress}%` }} />
+                  </div>
+                )}
+                {it.error && <p className="text-red-300/90 mt-0.5 break-words">{it.error}</p>}
+              </li>
+            ))}
+          </ul>
+          {batchDir && <p className="text-[10px] text-zinc-500 break-all">Folder: {batchDir}</p>}
+          {!batchRunning && (
+            <div className="flex items-center justify-between pt-1">
+              <button onClick={openExportFolder} className="flex items-center space-x-1 text-[11px] text-indigo-300 hover:text-white" data-testid="open-export-folder">
+                <FolderOpen className="w-3 h-3" />
+                <span>Open folder</span>
+              </button>
+              <button onClick={() => setBatchItems([])} className="text-[11px] text-zinc-500 hover:text-zinc-300">Close</button>
+            </div>
+          )}
+        </div>
+      )}
 
       {clips.length === 0 && (
         <div className="p-3 rounded-xl border border-dashed border-white/10 text-center text-[11px] text-zinc-500">

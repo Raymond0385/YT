@@ -1390,6 +1390,27 @@ def export_set_settings(payload: YoutubeSettingsPayload):
         json.dump(settings, f, indent=2)
     return {"export_dir": folder}
 
+def open_in_file_manager(path: str) -> None:
+    """Shows a folder in Explorer / Finder / the default file manager."""
+    if sys.platform == "win32":
+        os.startfile(path)  # type: ignore[attr-defined]
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", path])
+    else:
+        subprocess.Popen(["xdg-open", path])
+
+@app.post("/api/export/open-folder", dependencies=[Depends(verify_loopback_request), Depends(verify_local_origin)])
+def export_open_folder():
+    """Opens the folder finished exports are saved to (only that folder, never a path from the request)."""
+    folder = current_export_dir()
+    try:
+        os.makedirs(folder, exist_ok=True)
+        open_in_file_manager(folder)
+    except Exception as e:
+        print(f"[export] could not open folder: {e}")
+        raise HTTPException(status_code=500, detail="Could not open the folder")
+    return {"opened": folder}
+
 def housekeeping():
     """Deletes stale working files so temp/exports do not pile up (only our own prefixed files)."""
     fu.cleanup_old_files(OUTPUT_DIR, ("export_", "kadr_subtitles_", "capshorts_subtitles_"), 24 * 3600)
