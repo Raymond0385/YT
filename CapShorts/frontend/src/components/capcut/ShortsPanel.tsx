@@ -8,7 +8,7 @@ import { snapToWord, wordIndexesInRange } from '../../utils/clipEdit';
 import { suggestTitle, TITLE_DEFAULT_SECONDS, TITLE_STYLES, TitleStyle } from '../../utils/titleOverlay';
 import { buildExportPayload, shortFileName } from '../../utils/exportPayload';
 import { batchSummary, BatchItem, runBatchExport } from '../../utils/batchExport';
-import templatesData from '../../data/templates.json';
+import { findPreset } from '../../utils/presets';
 import { SubtitlePreset } from '../../types';
 
 /** The detection's tier, or one derived from the score for shorts made before tiers existed. */
@@ -109,8 +109,7 @@ export const ShortsPanel: React.FC = () => {
         useVideoStore.setState({ serverVideoPath: videoPath });
       }
 
-      const presets = templatesData as SubtitlePreset[];
-      const preset = presets.find((p) => p.id === activeTemplateId) || presets[0];
+      const preset = findPreset(activeTemplateId, useVideoStore.getState().userPresets);
       const list = [...clips].sort((a, b) => a.start - b.start);
       await runBatchExport({
         clips: list,

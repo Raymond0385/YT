@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { apiUrl } from '../config';
 import { clampRange, describeClipRange, moveRange, splitRange } from '../utils/clipEdit';
+import { findPreset, isUserPreset, loadUserPresets, makeUserPreset, MAX_USER_PRESETS, storeUserPresets } from '../utils/presets';
 import { createHistory } from '../utils/history';
 import { ProjectFile, ProjectVideoRef, videoMatches } from '../utils/projectFile';
 import { WordToken, SubtitlePreset, BrollClip, VideoClip, VideoSegment, AspectRatio, EngineHealth, ExportSettings } from '../types';
@@ -20,6 +21,12 @@ interface VideoStoreState {
   // Subtitle / Words
   transcript: WordToken[];
   activeTemplateId: string;
+  /** Styles the user saved (also kept in the browser storage) */
+  userPresets: SubtitlePreset[];
+  /** Saves the style in use (preset + tweaks) as a new preset and switches to it. Returns its id. */
+  saveUserPreset: (name: string) => string;
+  deleteUserPreset: (id: string) => void;
+  addUserPresets: (list: SubtitlePreset[]) => void;
   customStyleOverrides: Partial<SubtitlePreset>;
 
   // AI Viral Shorts / Clips
@@ -227,6 +234,29 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
 
   transcript: [],
   activeTemplateId: 'mrbeast-yellow-pop',
+  userPresets: typeof window !== 'undefined' ? loadUserPresets() : [],
+  saveUserPreset: (name) => {
+    const { activeTemplateId, customStyleOverrides, userPresets } = get();
+    const preset = makeUserPreset(name, findPreset(activeTemplateId, userPresets), customStyleOverrides);
+    const list = [preset, ...userPresets].slice(0, MAX_USER_PRESETS);
+    storeUserPresets(list);
+    set({ userPresets: list, activeTemplateId: preset.id, customStyleOverrides: {} });
+    return preset.id;
+  },
+  deleteUserPreset: (id) => {
+    const list = get().userPresets.filter((p) => p.id !== id);
+    storeUserPresets(list);
+    // a project using the deleted preset keeps its look: the preset's values become tweaks of the first style
+    set((state) => (state.activeTemplateId === id
+      ? { userPresets: list, activeTemplateId: findPreset(null).id, customStyleOverrides: { ...findPreset(id, state.userPresets), ...state.customStyleOverrides } }
+      : { userPresets: list }));
+  },
+  addUserPresets: (more) => {
+    const known = new Set(get().userPresets.map((p) => p.id));
+    const list = [...more.filter((p) => !known.has(p.id)), ...get().userPresets].slice(0, MAX_USER_PRESETS);
+    storeUserPresets(list);
+    set({ userPresets: list });
+  },
   customStyleOverrides: {},
 
   clips: [],
@@ -571,6 +601,9 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
       selectedClipId: project.view.selectedClipId,
       videoSegments: segments,
       activeTemplateId: project.activeTemplateId || state.activeTemplateId,
+      ...(project.customPreset && isUserPreset(project.activeTemplateId) && !state.userPresets.some((p) => p.id === project.customPreset!.id)
+        ? (() => { const list = [project.customPreset!, ...state.userPresets]; storeUserPresets(list); return { userPresets: list }; })()
+        : {}),
       customStyleOverrides: project.customStyleOverrides,
       brollList: project.brollList,
       videoVolume: project.videoVolume,

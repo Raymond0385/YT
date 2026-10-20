@@ -17,7 +17,7 @@ import {
 import { useShallow } from 'zustand/react/shallow';
 import { useVideoStore } from '../../store/useVideoStore';
 import { SubtitlePreset } from '../../types';
-import templatesData from '../../data/templates.json';
+import { findPreset } from '../../utils/presets';
 
 const FONTS = [
   'The Bold Font',
@@ -95,12 +95,11 @@ export const PropertiesInspector: React.FC = () => {
     }))
   );
 
+  const userPresets = useVideoStore((s) => s.userPresets);
   // Active Preset with live overrides
   const activePreset: SubtitlePreset = useMemo(() => {
-    const rawList = templatesData as SubtitlePreset[];
-    const found = rawList.find(t => t.id === activeTemplateId) || rawList[0];
-    return { ...found, ...customStyleOverrides };
-  }, [activeTemplateId, customStyleOverrides]);
+    return { ...findPreset(activeTemplateId, userPresets), ...customStyleOverrides };
+  }, [activeTemplateId, customStyleOverrides, userPresets]);
 
   // Selected Word (if a subtitle word is currently selected)
   const selectedWordIndex = useMemo(() => {

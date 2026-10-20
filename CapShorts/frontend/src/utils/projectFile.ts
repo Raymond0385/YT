@@ -1,3 +1,4 @@
+import { cleanPreset, findPreset, isUserPreset } from './presets';
 import { WordToken, VideoClip, VideoSegment, BrollClip, SubtitlePreset, AspectRatio, ExportSettings } from '../types';
 
 export const PROJECT_FORMAT = 'kadr-project';
@@ -57,6 +58,8 @@ export interface ProjectFile {
   clips: VideoClip[];
   videoSegments: VideoSegment[];
   activeTemplateId: string;
+  /** The user's own preset in use, so the project looks the same on another computer */
+  customPreset?: SubtitlePreset;
   customStyleOverrides: Partial<SubtitlePreset>;
   brollList: BrollClip[];
   videoVolume: number;
@@ -118,6 +121,7 @@ export interface ProjectSource {
   silenceRegions: SilenceRegion[];
   removedSilenceDuration: number;
   silenceBackup: SilenceBackup | null;
+  userPresets?: SubtitlePreset[];
   /** Set while a project is open without its video: keeps the reference to the original file. */
   projectNeedsVideo?: ProjectVideoRef | null;
   /** Id of the kept copy of the video (see videoKeeper). */
@@ -142,6 +146,7 @@ export function buildProject(src: ProjectSource, appVersion?: string): ProjectFi
     clips: src.clips,
     videoSegments: src.videoSegments,
     activeTemplateId: src.activeTemplateId,
+    ...(isUserPreset(src.activeTemplateId) ? { customPreset: findPreset(src.activeTemplateId, src.userPresets || []) } : {}),
     customStyleOverrides: src.customStyleOverrides,
     brollList: src.brollList,
     videoVolume: src.videoVolume,
@@ -305,6 +310,8 @@ export function parseProject(text: string): ParseResult {
     clips,
     videoSegments: segments,
     activeTemplateId: isStr(raw.activeTemplateId) ? raw.activeTemplateId : '',
+    ...(isUserPreset(raw.activeTemplateId as string) && cleanPreset(raw.customPreset, raw.activeTemplateId as string)
+      ? { customPreset: cleanPreset(raw.customPreset, raw.activeTemplateId as string)! } : {}),
     customStyleOverrides: isObj(raw.customStyleOverrides) ? (raw.customStyleOverrides as Partial<SubtitlePreset>) : {},
     brollList: Array.isArray(raw.brollList) ? (raw.brollList.filter(isObj) as unknown as BrollClip[]) : [],
     videoVolume: isNum(raw.videoVolume) ? raw.videoVolume : 1,

@@ -22,7 +22,7 @@ import { Framing, loadFraming, saveFraming } from '../../utils/exportPayload';
 import { TITLE_EM_PER_LINE, TITLE_FONT_REL, TITLE_PAD_REL, TITLE_SIDE_REL, TITLE_STYLES, TITLE_TOP_REL, titleVisibleAt } from '../../utils/titleOverlay';
 import { useVideoStore } from '../../store/useVideoStore';
 import { SubtitlePreset, WordToken } from '../../types';
-import templatesData from '../../data/templates.json';
+import { findPreset } from '../../utils/presets';
 import { formatTime, formatTimecode, timelineToSourceTime, sourceToTimelineTime } from '../../utils/timeFormat';
 import { formatCasing } from '../../utils/styleHelper';
 import { getEmojiForWords } from '../../utils/emojiHelper';
@@ -119,12 +119,11 @@ export const CanvasPreview: React.FC = () => {
     return clips.find(c => c.id === selectedClipId) || null;
   }, [clips, selectedClipId]);
 
+  const userPresets = useVideoStore((s) => s.userPresets);
   // Active Preset with live overrides
   const activePreset: SubtitlePreset = useMemo(() => {
-    const rawList = templatesData as SubtitlePreset[];
-    const found = rawList.find(t => t.id === activeTemplateId) || rawList[0];
-    return { ...found, ...customStyleOverrides };
-  }, [activeTemplateId, customStyleOverrides]);
+    return { ...findPreset(activeTemplateId, userPresets), ...customStyleOverrides };
+  }, [activeTemplateId, customStyleOverrides, userPresets]);
 
   const isInternalUpdateRef = useRef(false);
   const isSeekingRef = useRef(false);

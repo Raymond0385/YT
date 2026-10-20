@@ -30,7 +30,7 @@ import { useVideoStore } from '../../store/useVideoStore';
 import { apiUrl } from '../../config';
 import { ShortsPanel } from './ShortsPanel';
 import { SubtitlePreset, VideoClip, BrollClip } from '../../types';
-import templatesData from '../../data/templates.json';
+import { BUILTIN_PRESETS, findPreset, isUserPreset, parsePresetsFile, presetsFileText, savePresetsFile, USER_CATEGORY } from '../../utils/presets';
 import { formatTime, formatTimeWithMs } from '../../utils/timeFormat';
 import { formatCasing } from '../../utils/styleHelper';
 
@@ -68,6 +68,10 @@ export const MediaLibraryPanel: React.FC = () => {
     activeTemplateId,
     setActiveTemplate,
     customStyleOverrides,
+    userPresets,
+    saveUserPreset,
+    deleteUserPreset,
+    addUserPresets,
     updateCustomStyle,
     groqApiKey,
     setGroqApiKey,
@@ -117,6 +121,10 @@ export const MediaLibraryPanel: React.FC = () => {
       alignTranscriptToText: state.alignTranscriptToText,
       transcript: state.transcript,
       activeTemplateId: state.activeTemplateId,
+      userPresets: state.userPresets,
+      saveUserPreset: state.saveUserPreset,
+      deleteUserPreset: state.deleteUserPreset,
+      addUserPresets: state.addUserPresets,
       setActiveTemplate: state.setActiveTemplate,
       customStyleOverrides: state.customStyleOverrides,
       updateCustomStyle: state.updateCustomStyle,
@@ -289,7 +297,33 @@ export const MediaLibraryPanel: React.FC = () => {
     }
   };
 
-  const presets = templatesData as SubtitlePreset[];
+  const presets = useMemo(() => [...userPresets, ...BUILTIN_PRESETS], [userPresets]);
+  const categories = userPresets.length ? ['All', USER_CATEGORY, ...TEMPLATE_CATEGORIES.slice(1)] : TEMPLATE_CATEGORIES;
+  const [presetNote, setPresetNote] = useState<string | null>(null);
+  const tweaked = Object.keys(customStyleOverrides || {}).length > 0;
+
+  const saveCurrentStyle = () => {
+    const base = findPreset(activeTemplateId, userPresets);
+    const name = window.prompt('Name of your preset', tweaked ? `${base.name} (mine)` : `${base.name} copy`);
+    if (!name || !name.trim()) return;
+    saveUserPreset(name.trim());
+    setSelectedCategory(USER_CATEGORY);
+    setPresetNote(`Saved "${name.trim()}"`);
+  };
+
+  const importPresets = (file: File | undefined) => {
+    if (!file) return;
+    void file.text().then((text) => {
+      const { presets: found, error } = parsePresetsFile(text, userPresets);
+      if (error) {
+        setPresetNote(error);
+        return;
+      }
+      addUserPresets(found);
+      setSelectedCategory(USER_CATEGORY);
+      setPresetNote(`Imported ${found.length} preset${found.length === 1 ? '' : 's'}`);
+    });
+  };
 
   const filteredPresets = useMemo(() => {
     return presets.filter(p => {
@@ -809,7 +843,7 @@ export const MediaLibraryPanel: React.FC = () => {
               </div>
 
               <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 no-scrollbar">
-                {TEMPLATE_CATEGORIES.map(cat => (
+                {categories.map(cat => (
                   <button
                     key={cat}
                     onClick={() => setSelectedCategory(cat)}
@@ -823,6 +857,33 @@ export const MediaLibraryPanel: React.FC = () => {
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* The user's own presets: save the current look, move presets between computers */}
+            <div className="flex items-center gap-1.5 flex-wrap" data-testid="user-presets-bar">
+              <button
+                onClick={saveCurrentStyle}
+                className="px-2.5 py-1 rounded-lg bg-indigo-500/15 border border-indigo-500/40 text-[11px] font-semibold text-indigo-200 hover:bg-indigo-500/25"
+                title="Save the style in use, with your changes, as your own preset"
+                data-testid="save-preset"
+              >
+                Save current style
+              </button>
+              <label className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-white/10 text-[11px] text-zinc-300 hover:text-white cursor-pointer" title="Add presets from a .json file">
+                Import
+                <input type="file" accept=".json,application/json" className="hidden" data-testid="import-presets"
+                       onChange={(e) => { importPresets(e.target.files?.[0]); e.target.value = ''; }} />
+              </label>
+              <button
+                onClick={() => void savePresetsFile(presetsFileText(userPresets))}
+                disabled={!userPresets.length}
+                className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-white/10 text-[11px] text-zinc-300 hover:text-white disabled:opacity-40"
+                title="Save your presets to a file"
+                data-testid="export-presets"
+              >
+                Export ({userPresets.length})
+              </button>
+              {presetNote && <span className="text-[10px] text-zinc-400" data-testid="preset-note">{presetNote}</span>}
             </div>
 
             {/* Templates Grid */}
@@ -844,11 +905,26 @@ export const MediaLibraryPanel: React.FC = () => {
                       <span className="text-[11px] font-bold text-white truncate max-w-[120px]">
                         {preset.name}
                       </span>
-                      {isSelected && (
-                        <div className="w-4 h-4 rounded-full bg-gradient-to-r from-indigo-500 to-sky-400 flex items-center justify-center shadow-xs">
-                          <Check className="w-2.5 h-2.5 text-white stroke-[3]" />
-                        </div>
-                      )}
+                      <div className="flex items-center space-x-1">
+                        {isSelected && (
+                          <div className="w-4 h-4 rounded-full bg-gradient-to-r from-indigo-500 to-sky-400 flex items-center justify-center shadow-xs">
+                            <Check className="w-2.5 h-2.5 text-white stroke-[3]" />
+                          </div>
+                        )}
+                        {isUserPreset(preset.id) && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (window.confirm(`Delete your preset "${preset.name}"?`)) deleteUserPreset(preset.id);
+                            }}
+                            className="w-4 h-4 rounded-full text-zinc-500 hover:text-red-400 hover:bg-white/[0.06] flex items-center justify-center text-[11px] leading-none"
+                            title="Delete this preset"
+                            data-testid="delete-preset"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {/* Live styled sample text preview */}

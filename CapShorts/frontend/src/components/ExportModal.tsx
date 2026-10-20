@@ -4,7 +4,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useVideoStore } from '../store/useVideoStore';
 import { apiUrl } from '../config';
 import { buildExportPayload, Framing, loadFraming, saveFraming } from '../utils/exportPayload';
-import templatesData from '../data/templates.json';
+import { findPreset } from '../utils/presets';
 import { SubtitlePreset } from '../types';
 
 const formatSrtTime = (seconds: number) => {
@@ -232,8 +232,7 @@ export const ExportModal: React.FC = () => {
     if (!transcript || transcript.length === 0) return;
     setExportingSubtitle(format);
     try {
-      const presets = templatesData as SubtitlePreset[];
-      const preset = presets.find(p => p.id === activeTemplateId) || presets[0];
+      const preset = findPreset(activeTemplateId, useVideoStore.getState().userPresets);
 
       let content = '';
       try {
@@ -281,8 +280,7 @@ export const ExportModal: React.FC = () => {
     setExportProgress(5, "Initializing Media Pipeline...");
     setExportResultUrl(null);
 
-    const presets = templatesData as SubtitlePreset[];
-    const preset = presets.find(p => p.id === activeTemplateId) || presets[0];
+    const preset = findPreset(activeTemplateId, useVideoStore.getState().userPresets);
 
     try {
       let effectiveVideoPath = serverVideoPath;
