@@ -10,7 +10,7 @@ Pure functions, no I/O:
 """
 
 import re
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 MIN_WORD_DURATION = 0.08
 _PUNCT = ".,!?:;\"'()[]{}—–-…"
@@ -20,14 +20,20 @@ def _norm(token: str) -> str:
     return token.strip().strip(_PUNCT).lower()
 
 
-def levenshtein(a: str, b: str) -> int:
-    """Classic Wagner-Fischer edit distance, O(len(a)*len(b)) time, O(min) memory."""
+def levenshtein(a: str, b: str, limit: Optional[int] = None) -> int:
+    """
+    Classic Wagner-Fischer edit distance, O(len(a)*len(b)) time, O(min) memory.
+    With `limit` it stops as soon as the distance is sure to exceed it and returns limit + 1
+    (most comparisons are between clearly different words, so this skips nearly all the work).
+    """
     if a == b:
         return 0
     if len(a) < len(b):
         a, b = b, a
     if not b:
         return len(a)
+    if limit is not None:
+        return _bounded_levenshtein(a, b, limit)
     prev = list(range(len(b) + 1))
     for i, ca in enumerate(a, 1):
         cur = [i]
@@ -37,14 +43,130 @@ def levenshtein(a: str, b: str) -> int:
     return prev[-1]
 
 
+def _bounded_levenshtein(a: str, b: str, limit: int) -> int:
+    """
+    Edit distance if it is <= limit, else limit + 1 (len(a) >= len(b)). Only the cells within `limit` of the
+    diagonal can stay under the limit, so only those are computed, and it stops once a whole row is over it.
+    """
+    big = limit + 1
+    la, lb = len(a), len(b)
+    if la - lb > limit:
+        return big
+    prev = [j if j <= limit else big for j in range(lb + 1)]
+    for i in range(1, la + 1):
+        cur = [big] * (lb + 1)
+        cur[0] = i if i <= limit else big
+        row_min = cur[0]
+        ca = a[i - 1]
+        for j in range(max(1, i - limit), min(lb, i + limit) + 1):
+            v = min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != b[j - 1]))
+            if v > big:
+                v = big
+            cur[j] = v
+            if v < row_min:
+                row_min = v
+        if row_min > limit:
+            return big                # the row minimum never decreases further down
+        prev = cur
+    return min(prev[lb], big)
+
+
 def normalized_distance(a: str, b: str) -> float:
     """Edit distance divided by the longer string length: 0.0 identical .. 1.0 unrelated."""
     longest = max(len(a), len(b))
     return levenshtein(a, b) / longest if longest else 0.0
 
 
-def _tokens_cost(a: str, b: str) -> float:
-    return normalized_distance(_norm(a), _norm(b))
+def close_distance(a: str, b: str, threshold: float) -> Optional[float]:
+    """normalized_distance(a, b) if it is <= threshold, else None. Much faster than computing it in full."""
+    longest = max(len(a), len(b))
+    if not longest:
+        return 0.0
+    limit = int(threshold * longest + 1e-9)
+    d = levenshtein(a, b, limit)
+    return d / longest if d <= limit else None
+
+
+_DIAG, _UP, _LEFT = 0, 1, 2
+
+
+def _align_pairs(old: List[str], new: List[str], threshold: float) -> List[Optional[int]]:
+    """
+    Optimal token alignment (see align_words); returns pair[j] = index of the old token matched to new token j.
+
+    Only a band of cells around the diagonal is computed (Ukkonen): a path that leaves the band already costs more
+    than the band's limit, so when the best path found inside costs no more than that limit it is the global best,
+    with the same tie-breaking as the full table. Otherwise the band doubles. A few edits in an hour of speech
+    therefore cost a thin band instead of a words x words table.
+    """
+    n, m = len(old), len(new)
+    diff = m - n
+    cache: Dict[Tuple[str, str], float] = {}
+
+    def cost(a: str, b: str) -> float:
+        # Similar words are cheap; dissimilar ones still pair up (cost 1.0 < insert+delete = 2.0)
+        # so a rewritten sentence keeps the speech's rough timing instead of collapsing.
+        if a == b:
+            return 0.0
+        c = cache.get((a, b))
+        if c is None:
+            d = close_distance(a, b, threshold)
+            c = cache[(a, b)] = d if d is not None else 1.0
+        return c
+
+    inf = float("inf")
+    limit = abs(diff) + 16
+    while True:
+        extra = (limit - abs(diff)) // 2
+        tmin, tmax = min(0, diff) - extra, max(0, diff) + extra      # allowed j - i
+        full = tmin <= -n and tmax >= m
+        los: List[int] = []
+        vals: List[List[float]] = []
+        backs: List[bytearray] = []
+        for i in range(n + 1):
+            lo, hi = max(0, i + tmin), min(m, i + tmax)
+            row = [inf] * (hi - lo + 1)
+            back = bytearray(hi - lo + 1)
+            if i == 0:
+                for j in range(lo, hi + 1):
+                    row[j - lo], back[j - lo] = float(j), _LEFT
+            else:
+                plo, prow = los[-1], vals[-1]
+                phi = plo + len(prow) - 1
+                a = old[i - 1]
+                for j in range(lo, hi + 1):
+                    if j == 0:
+                        row[0], back[0] = float(i), _UP
+                        continue
+                    diag = prow[j - 1 - plo] + cost(a, new[j - 1]) if plo <= j - 1 <= phi else inf
+                    up = prow[j - plo] + 1.0 if plo <= j <= phi else inf
+                    left = row[j - 1 - lo] + 1.0 if j - 1 >= lo else inf
+                    # ties prefer the diagonal, then dropping an old word
+                    if diag <= up and diag <= left:
+                        row[j - lo], back[j - lo] = diag, _DIAG
+                    elif up <= left:
+                        row[j - lo], back[j - lo] = up, _UP
+                    else:
+                        row[j - lo], back[j - lo] = left, _LEFT
+            los.append(lo)
+            vals.append(row)
+            backs.append(back)
+        if full or vals[n][m - los[n]] <= limit:
+            break
+        limit *= 2
+
+    pair: List[Optional[int]] = [None] * m
+    i, j = n, m
+    while i > 0 and j > 0:
+        step = backs[i][j - los[i]]
+        if step == _DIAG:
+            pair[j - 1] = i - 1
+            i, j = i - 1, j - 1
+        elif step == _UP:
+            i -= 1
+        else:
+            j -= 1
+    return pair
 
 
 def align_words(old_words: List[Dict[str, Any]], new_text: str, match_threshold: float = 0.5) -> List[Dict[str, Any]]:
@@ -64,33 +186,9 @@ def align_words(old_words: List[Dict[str, Any]], new_text: str, match_threshold:
         return [{"start": 0.0, "end": 0.0, "word": t, "keyword": False} for t in new_tokens]
 
     n, m = len(old_words), len(new_tokens)
-
-    def sub_cost(i: int, j: int) -> float:
-        # Similar words are cheap; dissimilar ones still pair up (cost 1.0 < insert+delete = 2.0)
-        # so a rewritten sentence keeps the speech's rough timing instead of collapsing.
-        c = _tokens_cost(old_words[i]["word"], new_tokens[j])
-        return c if c <= match_threshold else 1.0
-
-    dp = [[0.0] * (m + 1) for _ in range(n + 1)]
-    for i in range(1, n + 1):
-        dp[i][0] = float(i)
-    for j in range(1, m + 1):
-        dp[0][j] = float(j)
-    for i in range(1, n + 1):
-        for j in range(1, m + 1):
-            dp[i][j] = min(dp[i - 1][j - 1] + sub_cost(i - 1, j - 1), dp[i - 1][j] + 1.0, dp[i][j - 1] + 1.0)
-
-    # Backtrack: pair[j] = index of old word matched to new token j, else None
-    pair: List[Optional[int]] = [None] * m
-    i, j = n, m
-    while i > 0 and j > 0:
-        if dp[i][j] == dp[i - 1][j - 1] + sub_cost(i - 1, j - 1):
-            pair[j - 1] = i - 1
-            i, j = i - 1, j - 1
-        elif dp[i][j] == dp[i - 1][j] + 1.0:
-            i -= 1
-        else:
-            j -= 1
+    old_norm = [_norm(w["word"]) for w in old_words]
+    new_norm = [_norm(t) for t in new_tokens]
+    pair = _align_pairs(old_norm, new_norm, match_threshold)
 
     out: List[Dict[str, Any]] = []
     for j, tok in enumerate(new_tokens):
@@ -135,21 +233,24 @@ def apply_glossary(words: List[Dict[str, Any]], glossary: List[str], threshold: 
     if not terms or not words:
         return [dict(w) for w in words]
 
+    keyed = [(term, _norm(term).replace(" ", "")) for term in terms]
+    keyed = [(term, key) for term, key in keyed if len(key) >= 3]
+    norms = [_norm(w["word"]) for w in words]
+
     out: List[Dict[str, Any]] = []
     i = 0
     while i < len(words):
         best = None  # (distance, run_length, term)
-        for term in terms:
-            tkey = _norm(term).replace(" ", "")
-            if len(tkey) < 3:
-                continue
+        for term, tkey in keyed:
             glued = ""
             for run in range(1, min(6, len(words) - i) + 1):
-                glued += _norm(words[i + run - 1]["word"])
+                glued += norms[i + run - 1]
                 if len(glued) > len(tkey) * 2:
                     break
-                d = normalized_distance(glued, tkey)
-                if d <= threshold and (best is None or d < best[0] or (d == best[0] and run > best[1])):
+                if abs(len(glued) - len(tkey)) > threshold * max(len(glued), len(tkey)) + 1e-9:
+                    continue
+                d = close_distance(glued, tkey, threshold)
+                if d is not None and (best is None or d < best[0] or (d == best[0] and run > best[1])):
                     best = (d, run, term)
         if best is None:
             out.append(dict(words[i]))
@@ -177,22 +278,47 @@ def collapse_repeats(words: List[Dict[str, Any]], max_phrase: int = 6, threshold
     and the repeat is at least 3 words long, or 1-2 words repeated 3+ times (so legit "very very" stays).
     """
     result = [dict(w) for w in words]
+    norms = [_norm(w["word"]) for w in result]
+    starts: List[int] = []
+
+    def index_lengths():
+        starts[:] = [0]
+        for t in norms:
+            starts.append(starts[-1] + len(t))
+
+    def joined_len(i: int, size: int) -> int:
+        k = min(i + size, len(norms))
+        return starts[k] - starts[i] + max(0, k - i - 1)          # words plus the spaces between them
+
+    def maybe_similar(i: int, j: int, size: int) -> bool:
+        la, lb = joined_len(i, size), joined_len(j, size)
+        return abs(la - lb) <= threshold * max(la, lb) + 1e-9
+
+    def similar(x: str, y: str) -> bool:
+        return x == y or close_distance(x, y, threshold) is not None
+
+    index_lengths()
+
     changed = True
     while changed:
         changed = False
         for size in range(max_phrase, 0, -1):
             i = 0
             while i + 2 * size <= len(result):
-                a = " ".join(_norm(w["word"]) for w in result[i:i + size])
-                b = " ".join(_norm(w["word"]) for w in result[i + size:i + 2 * size])
-                if a and normalized_distance(a, b) <= threshold:
+                if not maybe_similar(i, i + size, size):
+                    i += 1
+                    continue
+                a = " ".join(norms[i:i + size])
+                if a and similar(a, " ".join(norms[i + size:i + 2 * size])):
                     if size >= 3:
                         drop = True
                     else:
-                        c = " ".join(_norm(w["word"]) for w in result[i + 2 * size:i + 3 * size])
-                        drop = bool(c) and normalized_distance(a, c) <= threshold
+                        c = " ".join(norms[i + 2 * size:i + 3 * size])
+                        drop = bool(c) and similar(a, c)
                     if drop:
                         del result[i + size:i + 2 * size]
+                        del norms[i + size:i + 2 * size]
+                        index_lengths()
                         changed = True
                         continue
                 i += 1

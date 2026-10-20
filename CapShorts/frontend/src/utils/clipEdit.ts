@@ -61,3 +61,31 @@ export function describeClipRange(words: WordToken[], start: number, end: number
     keywords,
   };
 }
+
+/** Moves a range so it starts at `start`, keeping its length and staying inside the video. */
+export function moveRange(start: number, end: number, newStart: number, total: number): [number, number] {
+  const len = Math.max(MIN_CLIP_LEN, end - start);
+  const max = total > 0 ? total : Math.max(end, newStart + len);
+  const s = Math.max(0, Math.min(newStart, max - len));
+  return [round2(s), round2(Math.min(max, s + len))];
+}
+
+/**
+ * Splits [start, end] at `at` into two ranges. Returns null when either part would be shorter than
+ * MIN_CLIP_LEN (the cut is too close to an edge).
+ */
+export function splitRange(start: number, end: number, at: number): [[number, number], [number, number]] | null {
+  const t = round2(at);
+  if (t - start < MIN_CLIP_LEN || end - t < MIN_CLIP_LEN) return null;
+  return [[round2(start), t], [t, round2(end)]];
+}
+
+/** Indexes of the words that belong to [start, end] (same tolerance as describeClipRange). */
+export function wordIndexesInRange(words: WordToken[], start: number, end: number): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    if (w.start >= start - 0.05 && w.end <= end + 0.05) out.push(i);
+  }
+  return out;
+}

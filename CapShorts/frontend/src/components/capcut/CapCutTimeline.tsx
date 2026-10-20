@@ -22,11 +22,13 @@ import {
   Edit2,
   Zap,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Clapperboard
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { useVideoStore } from '../../store/useVideoStore';
-import { WordToken, VideoSegment } from '../../types';
+import { WordToken, VideoSegment, VideoClip } from '../../types';
+import { snapToWord } from '../../utils/clipEdit';
 import { formatTimecode } from '../../utils/timeFormat';
 
 /* ==========================================================================
@@ -314,6 +316,59 @@ const VirtualizedSubtitleTrack: React.FC<VirtualizedSubtitleTrackProps> = React.
 });
 
 /* ==========================================================================
+   4b. SHORTS TRACK: select, trim by the edges, drag to move
+   ========================================================================== */
+type ClipDragMode = 'move' | 'start' | 'end';
+
+interface ShortsTrackProps {
+  clips: VideoClip[];
+  selectedClipId: string | null;
+  timelineZoom: number;
+  onSelect: (clip: VideoClip, e: React.MouseEvent) => void;
+  onDragStart: (clip: VideoClip, mode: ClipDragMode, e: React.MouseEvent) => void;
+}
+
+const ShortsTrack: React.FC<ShortsTrackProps> = React.memo(({ clips, selectedClipId, timelineZoom, onSelect, onDragStart }) => (
+  <div className="h-[26px] border-b border-white/[0.06] relative bg-zinc-950/30" data-testid="shorts-track">
+    {clips.length === 0 && (
+      <span className="absolute inset-0 flex items-center px-3 text-[10px] text-zinc-600">Shorts appear here after detection or "Add short"</span>
+    )}
+    {clips.map((clip, i) => {
+      const selected = clip.id === selectedClipId;
+      return (
+        <div
+          key={clip.id}
+          data-testid="timeline-short"
+          data-clip-id={clip.id}
+          onClick={(e) => { e.stopPropagation(); onSelect(clip, e); }}
+          onMouseDown={(e) => { if (e.button === 0) { e.stopPropagation(); onDragStart(clip, 'move', e); } }}
+          style={{ left: clip.start * timelineZoom, width: Math.max(6, (clip.end - clip.start) * timelineZoom), top: 3 }}
+          className={`absolute h-[20px] rounded-md border text-[10px] font-semibold flex items-center overflow-hidden cursor-grab active:cursor-grabbing ${
+            selected
+              ? 'bg-amber-500/35 border-amber-300 text-white z-10 shadow-[0_0_0_1px_rgba(252,211,77,0.5)]'
+              : 'bg-amber-500/15 border-amber-500/40 text-amber-100/90 hover:bg-amber-500/25'
+          }`}
+          title={`${clip.title} (${clip.start.toFixed(1)}s - ${clip.end.toFixed(1)}s). Drag to move, drag the edges to trim.`}
+        >
+          <div
+            data-testid="timeline-short-start"
+            onMouseDown={(e) => { e.stopPropagation(); onDragStart(clip, 'start', e); }}
+            className="w-1.5 h-full flex-shrink-0 cursor-ew-resize bg-amber-300/40 hover:bg-amber-200"
+          />
+          <span className="truncate px-1 pointer-events-none">{i + 1}. {clip.title}</span>
+          <div className="flex-1" />
+          <div
+            data-testid="timeline-short-end"
+            onMouseDown={(e) => { e.stopPropagation(); onDragStart(clip, 'end', e); }}
+            className="w-1.5 h-full flex-shrink-0 cursor-ew-resize bg-amber-300/40 hover:bg-amber-200"
+          />
+        </div>
+      );
+    })}
+  </div>
+));
+
+/* ==========================================================================
    5. MULTI-SEGMENT VIDEO FILMSTRIP TRACK (SPLIT & RIPPLE DELETE)
    ========================================================================== */
 interface VideoTrackProps {
@@ -456,6 +511,11 @@ export const CapCutTimeline: React.FC = () => {
     splitSegmentAtTime,
     isScrubbing,
     setIsScrubbing,
+    clips,
+    selectedClipId,
+    selectClip,
+    updateClip,
+    moveClip,
   } = useVideoStore(
     useShallow((state) => ({
       duration: state.duration,
@@ -484,6 +544,11 @@ export const CapCutTimeline: React.FC = () => {
       splitSegmentAtTime: state.splitSegmentAtTime,
       isScrubbing: state.isScrubbing,
       setIsScrubbing: state.setIsScrubbing,
+      clips: state.clips,
+      selectedClipId: state.selectedClipId,
+      selectClip: state.selectClip,
+      updateClip: state.updateClip,
+      moveClip: state.moveClip,
     }))
   );
 
@@ -496,6 +561,9 @@ export const CapCutTimeline: React.FC = () => {
   const [track2Locked, setTrack2Locked] = useState(false);
   const [track3Locked, setTrack3Locked] = useState(false);
   const [isFullHeight, setIsFullHeight] = useState(false);
+  // A short being dragged on the timeline: what is dragged and where in the short it was grabbed
+  const [clipDrag, setClipDrag] = useState<{ id: string; mode: ClipDragMode; grab: number; moved: boolean } | null>(null);
+  const draggedRef = useRef(false);   // the click that ends a drag must not jump the playhead
 
   // Viewport geometry state for virtualization (no forced clientWidth in loop)
   const [scrollLeft, setScrollLeft] = useState(0);
@@ -631,6 +699,72 @@ export const CapCutTimeline: React.FC = () => {
       document.body.style.userSelect = '';
     };
   }, [isScrubbing, resizingWordId, resizeEdge, getTimeFromMouseEvent, updateWord, setCurrentTime, setIsScrubbing]);
+
+  const handleClipDragStart = useCallback((clip: VideoClip, mode: ClipDragMode, e: React.MouseEvent) => {
+    e.preventDefault();
+    if (scrollContainerRef.current) {
+      containerLeftRef.current = scrollContainerRef.current.getBoundingClientRect().left;
+    }
+    setIsPlaying(false);
+    selectClip(clip.id);
+    setClipDrag({ id: clip.id, mode, grab: getTimeFromMouseEvent(e) - clip.start, moved: false });
+  }, [getTimeFromMouseEvent, selectClip, setIsPlaying]);
+
+  const handleClipSelect = useCallback((clip: VideoClip) => {
+    if (draggedRef.current) {
+      draggedRef.current = false;
+      return;
+    }
+    selectClip(clip.id);
+    setCurrentTime(clip.start);
+  }, [selectClip, setCurrentTime]);
+
+  useEffect(() => {
+    if (!clipDrag) return;
+    document.body.style.cursor = clipDrag.mode === 'move' ? 'grabbing' : 'ew-resize';
+    document.body.style.userSelect = 'none';
+    let raf: number | null = null;
+    let pending: number | null = null;
+
+    const apply = () => {
+      raf = null;
+      if (pending === null) return;
+      const t = pending;
+      pending = null;
+      const { transcript: words, isSnapEnabled: snap } = useVideoStore.getState();
+      if (clipDrag.mode === 'move') {
+        const start = snap && words.length ? snapToWord(words, t - clipDrag.grab, 'start', 0.3) : t - clipDrag.grab;
+        moveClip(clipDrag.id, start);
+      } else {
+        const edgeTime = snap && words.length ? snapToWord(words, t, clipDrag.mode, 0.3) : t;
+        updateClip(clipDrag.id, { [clipDrag.mode]: edgeTime }, clipDrag.mode);
+        setCurrentTime(edgeTime);           // show the frame at the edge being trimmed
+      }
+    };
+    const onMove = (e: MouseEvent) => {
+      e.preventDefault();
+      pending = getTimeFromMouseEvent(e);
+      clipDrag.moved = true;
+      if (raf === null) raf = requestAnimationFrame(apply);
+    };
+    const onUp = () => {
+      if (raf !== null) cancelAnimationFrame(raf);
+      apply();
+      const clip = useVideoStore.getState().clips.find((c) => c.id === clipDrag.id);
+      if (clip && clipDrag.mode === 'move' && clipDrag.moved) setCurrentTime(clip.start);
+      draggedRef.current = clipDrag.moved;
+      setClipDrag(null);
+    };
+    window.addEventListener('mousemove', onMove, { passive: false });
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      if (raf !== null) cancelAnimationFrame(raf);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [clipDrag, getTimeFromMouseEvent, moveClip, updateClip, setCurrentTime]);
 
   // Handle video segment click (Blade split or selection)
   const handleSegmentClick = useCallback((seg: VideoSegment, e: React.MouseEvent) => {
@@ -866,7 +1000,16 @@ export const CapCutTimeline: React.FC = () => {
             {/* Ruler Corner Spacer */}
             <div className="h-7 border-b border-white/[0.08] bg-zinc-950/70 flex items-center justify-between px-3 text-[10px] text-zinc-400 font-mono">
               <span className="font-semibold text-zinc-300">TRACKS</span>
-              <span className="text-[9px] bg-white/[0.06] px-1.5 py-0.5 rounded text-zinc-400">3</span>
+              <span className="text-[9px] bg-white/[0.06] px-1.5 py-0.5 rounded text-zinc-400">4</span>
+            </div>
+
+            {/* Shorts Track Header */}
+            <div className="h-[26px] border-b border-white/[0.06] px-3 flex items-center text-xs font-semibold bg-zinc-950/30">
+              <div className="flex items-center space-x-2 text-amber-400">
+                <Clapperboard className="w-3.5 h-3.5" />
+                <span className="text-xs font-bold text-zinc-200">Shorts</span>
+                <span className="text-[9px] text-zinc-500 font-mono">{clips.length}</span>
+              </div>
             </div>
 
             {/* Track 1: Subtitle / Captions Track Header */}
@@ -972,6 +1115,15 @@ export const CapCutTimeline: React.FC = () => {
                 scrollLeft={scrollLeft}
                 containerWidth={containerWidth}
                 onMouseDown={handleScrubStart}
+              />
+
+              {/* 1b. Shorts: select, trim, move */}
+              <ShortsTrack
+                clips={clips}
+                selectedClipId={selectedClipId}
+                timelineZoom={timelineZoom}
+                onSelect={handleClipSelect}
+                onDragStart={handleClipDragStart}
               />
 
               {/* 2. Subtitle Phrase Track (CapCut Desktop Style, Virtualized ~8 blocks in DOM) */}

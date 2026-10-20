@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { apiUrl } from '../config';
-import { clampRange, describeClipRange } from '../utils/clipEdit';
+import { clampRange, describeClipRange, moveRange, splitRange } from '../utils/clipEdit';
 import { createHistory } from '../utils/history';
 import { ProjectFile, ProjectVideoRef, videoMatches } from '../utils/projectFile';
 import { WordToken, SubtitlePreset, BrollClip, VideoClip, VideoSegment, AspectRatio, EngineHealth, ExportSettings } from '../types';
@@ -82,6 +82,12 @@ interface VideoStoreState {
   updateClip: (id: string, changes: { title?: string; start?: number; end?: number }, edge?: 'start' | 'end') => void;
   deleteClip: (id: string) => void;
   addClip: (start: number, end: number, title?: string) => string;
+  /** Moves a short to start at `start`, keeping its length. */
+  moveClip: (id: string, start: number) => void;
+  /** Adds a copy of a short right after the original in the list and selects it. Returns the new id. */
+  duplicateClip: (id: string) => string | null;
+  /** Cuts a short in two at `at`. Returns false if the cut is too close to an edge. */
+  splitClip: (id: string, at: number) => boolean;
 
   setGroqApiKey: (key: string) => void;
   setRangeMode: (mode: 'full' | 'short_60s' | 'short_180s') => void;
@@ -639,6 +645,41 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
     });
     return { clips };
   }),
+  moveClip: (id, start) => set((state) => ({
+    clips: state.clips.map((c) => {
+      if (c.id !== id) return c;
+      const [s, e] = moveRange(c.start, c.end, start, state.duration);
+      if (s === c.start && e === c.end) return c;
+      return { ...c, start: s, end: e, duration: Math.round((e - s) * 10) / 10, custom: true, ...describeClipRange(state.transcript, s, e) };
+    }).sort((a, b) => a.start - b.start),
+  })),
+  duplicateClip: (id) => {
+    const src = get().clips.find((c) => c.id === id);
+    if (!src) return null;
+    const copyId = `clip-custom-${Date.now()}-${Math.floor(Math.random() * 1e4)}`;
+    set((state) => {
+      const i = state.clips.findIndex((c) => c.id === id);
+      const clips = [...state.clips];
+      clips.splice(i + 1, 0, { ...src, id: copyId, title: `${src.title} (copy)`, custom: true });
+      return { clips, selectedClipId: copyId };
+    });
+    return copyId;
+  },
+  splitClip: (id, at) => {
+    const src = get().clips.find((c) => c.id === id);
+    const parts = src ? splitRange(src.start, src.end, at) : null;
+    if (!src || !parts) return false;
+    const words = get().transcript;
+    const make = ([s, e]: [number, number], suffix: string, newId: string) => ({
+      ...src, id: newId, title: `${src.title} ${suffix}`, start: s, end: e,
+      duration: Math.round((e - s) * 10) / 10, custom: true, ...describeClipRange(words, s, e),
+    });
+    const secondId = `clip-custom-${Date.now()}-${Math.floor(Math.random() * 1e4)}`;
+    set((state) => ({
+      clips: state.clips.flatMap((c) => (c.id === id ? [make(parts[0], '(1)', id), make(parts[1], '(2)', secondId)] : [c])),
+    }));
+    return true;
+  },
   deleteClip: (id) => set((state) => ({
     clips: state.clips.filter((c) => c.id !== id),
     selectedClipId: state.selectedClipId === id ? null : state.selectedClipId,

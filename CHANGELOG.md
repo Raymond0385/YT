@@ -5,6 +5,22 @@ All notable changes to Kadr (formerly CapShorts) are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Shorts on the timeline: a Shorts track where a short is selected with a click, trimmed by dragging its edges and moved by dragging it (snaps to word edges when snapping is on).
+- Short editor: Duplicate, Split at playhead, and the captions of the short editable in place.
+
+### Fixed
+- The background engine kept running after Kadr was closed, crashed or restarted by the updater, which blocked updating and uninstalling (`backend-engine.exe` in use) and could leave an old engine answering after an update. The engine is now tied to the app (Windows job object) and also stops by itself when the app is gone; a leftover engine from an older version is stopped at start.
+
+### Performance
+- Text alignment after editing captions: about 2000x faster on long recordings (61 s -> 0.03 s for 3000 words), same results.
+- Clean-up after recognition (repeat removal + glossary): 10 s -> 0.9 s for an hour of speech, same results.
+- Face search for auto-reframe: about 6x faster (reads frames in order instead of seeking to each one).
+- Export and Settings windows no longer re-render on every frame of playback; the Shorts panel neither.
+- Removed an unused 2500-line component and its stylesheet (CSS bundle 78 KB -> 58 KB).
+
 ## [1.4.1] - 2026-10-18
 
 ### Added

@@ -124,6 +124,8 @@ jobs:
             --hidden-import "animation_specs" `
             --hidden-import "emoji_overlay" `
             --hidden-import "reframe" `
+            --hidden-import "media_store" `
+            --hidden-import "parent_watch" `
             --collect-all "cv2" `
             --collect-submodules "yt_dlp" `
             --collect-all "yt_dlp_ejs" `
@@ -167,6 +169,8 @@ jobs:
             --hidden-import "animation_specs" \
             --hidden-import "emoji_overlay" \
             --hidden-import "reframe" \
+            --hidden-import "media_store" \
+            --hidden-import "parent_watch" \
             --collect-all "cv2" \
             --collect-submodules "yt_dlp" \
             --collect-all "yt_dlp_ejs" \

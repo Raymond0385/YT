@@ -2196,6 +2196,8 @@ def update_telemetry_settings(payload: Dict[str, Any]):
 
 if __name__ == "__main__":
     import uvicorn
+    import parent_watch
+    parent_watch.exit_with_parent()      # started by the app: stop together with it
     try:
         housekeeping()
     except Exception as hk_err:

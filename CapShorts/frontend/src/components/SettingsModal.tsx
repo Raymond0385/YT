@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   AlertCircle
 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { useVideoStore } from '../store/useVideoStore';
 import { apiUrl } from '../config';
 
@@ -26,7 +27,17 @@ export const SettingsModal: React.FC = () => {
     selectedModel,
     setSelectedModel,
     engineHealth
-  } = useVideoStore();
+  } = useVideoStore(
+    useShallow((s) => ({
+      isSettingsModalOpen: s.isSettingsModalOpen,
+      setIsSettingsModalOpen: s.setIsSettingsModalOpen,
+      groqApiKey: s.groqApiKey,
+      setGroqApiKey: s.setGroqApiKey,
+      selectedModel: s.selectedModel,
+      setSelectedModel: s.setSelectedModel,
+      engineHealth: s.engineHealth,
+    }))
+  );
 
   const [activeSettingsTab, setActiveSettingsTab] = useState<'ai' | 'hardware' | 'broll' | 'privacy' | 'updates'>('ai');
   const [tempGroqKey, setTempGroqKey] = useState(groqApiKey);

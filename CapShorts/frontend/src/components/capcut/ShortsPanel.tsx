@@ -1,10 +1,10 @@
-import React, { useRef, useState } from 'react';
-import { Scissors, Flame, Pencil, Trash2, Plus, Crosshair, FolderOpen, Layers } from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
+import { Scissors, Flame, Pencil, Trash2, Plus, Crosshair, FolderOpen, Layers, Copy, SplitSquareHorizontal } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { useVideoStore } from '../../store/useVideoStore';
 import { apiUrl } from '../../config';
 import { formatTime } from '../../utils/timeFormat';
-import { snapToWord } from '../../utils/clipEdit';
+import { snapToWord, wordIndexesInRange } from '../../utils/clipEdit';
 import { buildExportPayload, shortFileName } from '../../utils/exportPayload';
 import { batchSummary, BatchItem, runBatchExport } from '../../utils/batchExport';
 import templatesData from '../../data/templates.json';
@@ -18,7 +18,7 @@ const smallBtn =
 export const ShortsPanel: React.FC = () => {
   const {
     clips, selectedClipId, selectClip, setClips, updateClip, deleteClip, addClip,
-    transcript, duration, currentTime, setCurrentTime, setIsExportModalOpen,
+    transcript, duration, setCurrentTime, setIsExportModalOpen, updateWord, duplicateClip, splitClip,
     videoFile, serverVideoPath, activeTemplateId, customStyleOverrides, brollList, showEmojis,
   } = useVideoStore(
     useShallow((s) => ({
@@ -31,7 +31,9 @@ export const ShortsPanel: React.FC = () => {
       addClip: s.addClip,
       transcript: s.transcript,
       duration: s.duration,
-      currentTime: s.currentTime,
+      updateWord: s.updateWord,
+      duplicateClip: s.duplicateClip,
+      splitClip: s.splitClip,
       setCurrentTime: s.setCurrentTime,
       setIsExportModalOpen: s.setIsExportModalOpen,
       videoFile: s.videoFile,
@@ -44,6 +46,12 @@ export const ShortsPanel: React.FC = () => {
   );
 
   const [editingId, setEditingId] = useState<string | null>(null);
+  const editingClip = clips.find((c) => c.id === editingId) || null;
+  // Words of the short being edited (indexes into the transcript), for editing its captions in place
+  const editingWords = useMemo(
+    () => (editingClip ? wordIndexesInRange(transcript, editingClip.start, editingClip.end) : []),
+    [transcript, editingClip?.start, editingClip?.end],      // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const [snap, setSnap] = useState(true);
   const [minLen, setMinLen] = useState(25);
   const [maxLen, setMaxLen] = useState(60);
@@ -151,7 +159,7 @@ export const ShortsPanel: React.FC = () => {
   };
 
   const createAtPlayhead = () => {
-    const start = maybeSnap(currentTime, 'start');
+    const start = maybeSnap(useVideoStore.getState().currentTime, 'start');
     const id = addClip(start, Math.min(duration || start + 30, start + 30), 'My short');
     // snap the end of the new clip too
     const end = maybeSnap(Math.min(duration || start + 30, start + 30), 'end');
@@ -360,7 +368,7 @@ export const ShortsPanel: React.FC = () => {
                       <div className="flex items-center justify-between text-[10px] text-zinc-400">
                         <span>{edge === 'start' ? 'Start' : 'End'}, s</span>
                         <button
-                          onClick={() => updateClip(clip.id, { [edge]: maybeSnap(currentTime, edge) }, edge)}
+                          onClick={() => updateClip(clip.id, { [edge]: maybeSnap(useVideoStore.getState().currentTime, edge) }, edge)}
                           className="flex items-center space-x-1 text-indigo-300 hover:text-white"
                           title="Use the playhead position"
                         >
@@ -392,6 +400,58 @@ export const ShortsPanel: React.FC = () => {
                   <p className={`text-[10px] ${clip.duration > 60 ? 'text-amber-400' : 'text-zinc-500'}`}>
                     Length {clip.duration}s{clip.duration > 60 ? ' - Shorts work best up to 60 s' : ''}
                   </p>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      data-testid="duplicate-short"
+                      onClick={() => { const id = duplicateClip(clip.id); if (id) setEditingId(id); }}
+                      className="flex items-center space-x-1 px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-[10px] text-zinc-200"
+                      title="Make a copy to try another cut or title"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>Duplicate</span>
+                    </button>
+                    <button
+                      data-testid="split-short"
+                      onClick={() => {
+                        const at = maybeSnap(useVideoStore.getState().currentTime, 'start');
+                        if (!splitClip(clip.id, at)) {
+                          setNote('Move the playhead inside the short (at least 1 s from its edges) to split it.');
+                        }
+                      }}
+                      className="flex items-center space-x-1 px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-[10px] text-zinc-200"
+                      title="Cut this short in two at the playhead"
+                    >
+                      <SplitSquareHorizontal className="w-3 h-3" />
+                      <span>Split at playhead</span>
+                    </button>
+                  </div>
+
+                  <div className="space-y-1" data-testid="short-captions">
+                    <span className="block text-[10px] text-zinc-400">Captions in this short ({editingWords.length} words)</span>
+                    {editingWords.length === 0 ? (
+                      <p className="text-[10px] text-zinc-500">No captions in this range yet.</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1 max-h-40 overflow-y-auto p-1 rounded-lg bg-zinc-950/60 border border-white/[0.06]">
+                        {editingWords.map((idx) => {
+                          const w = transcript[idx];
+                          return (
+                            <input
+                              key={w.id}
+                              value={w.word}
+                              data-testid="short-word"
+                              onFocus={() => setCurrentTime(w.start)}
+                              onChange={(e) => updateWord(idx, { word: e.target.value })}
+                              size={Math.max(2, w.word.length)}
+                              className={`bg-zinc-900 border rounded px-1 py-0.5 text-[11px] text-white focus:outline-none focus:border-indigo-500 ${
+                                w.keyword ? 'border-amber-500/50' : 'border-white/[0.08]'
+                              }`}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 

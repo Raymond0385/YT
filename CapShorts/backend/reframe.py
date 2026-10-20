@@ -29,6 +29,7 @@ SMOOTH_TAU = 0.35           # seconds: how quickly it settles on the face once i
 HOLD_GAP = 2.0              # seconds a missing face is bridged by holding / interpolating
 MIN_COVERAGE = 0.25         # follow only if a face is found in at least this share of the sampled frames
 MIN_SAMPLES = 3
+SEQUENTIAL_MAX_SKIP = 45     # frames between samples up to which reading straight through beats seeking
 
 
 @dataclass
@@ -185,12 +186,8 @@ def detect_faces(video_path: str, model_path: str, start: float, end: float, sam
         span = max(0.0, end - start)
         step = max(1.0 / sample_fps, span / max_samples) if span > 0 else 1.0
         samples: List[Sample] = []
-        t = start
-        while t <= end + 1e-6:
-            cap.set(cv2.CAP_PROP_POS_MSEC, t * 1000.0)
-            ok, frame = cap.read()
-            if not ok or frame is None:
-                break
+
+        def detect(frame, t: float):
             small = cv2.resize(frame, (dw, dh)) if scale < 1.0 else frame
             _, found = detector.detect(small)
             faces: List[Face] = []
@@ -199,7 +196,36 @@ def detect_faces(video_path: str, model_path: str, start: float, end: float, sam
                     x, y, w, h = (float(v) / scale for v in f[:4])
                     faces.append(Face(cx=x + w / 2.0, cy=y + h / 2.0, w=w, h=h, score=float(f[-1])))
             samples.append(Sample(t - start, faces))
-            t += step
+
+        fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
+        every = int(round(step * fps)) if fps > 0 else 0
+        if 0 < every <= SEQUENTIAL_MAX_SKIP:
+            # Reading straight through is several times faster than seeking to every sample
+            # (each seek decodes again from the previous keyframe).
+            cap.set(cv2.CAP_PROP_POS_MSEC, start * 1000.0)
+            first = cap.get(cv2.CAP_PROP_POS_FRAMES) or round(start * fps)
+            idx = 0
+            while True:
+                t = (first + idx) / fps
+                if t > end + 1e-6:
+                    break
+                if idx % every == 0:
+                    ok, frame = cap.read()
+                    if not ok or frame is None:
+                        break
+                    detect(frame, max(t, start))
+                elif not cap.grab():
+                    break
+                idx += 1
+        else:
+            t = start
+            while t <= end + 1e-6:
+                cap.set(cv2.CAP_PROP_POS_MSEC, t * 1000.0)
+                ok, frame = cap.read()
+                if not ok or frame is None:
+                    break
+                detect(frame, t)
+                t += step
         return samples, src_w, src_h
     finally:
         cap.release()

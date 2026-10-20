@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Share2, CheckCircle2, Download, Sparkles, FolderDown, Zap, Flame, Loader2, FileText, AlertTriangle, RotateCcw } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { useVideoStore } from '../store/useVideoStore';
 import { apiUrl } from '../config';
 import { buildExportPayload, Framing, loadFraming, saveFraming } from '../utils/exportPayload';
@@ -83,7 +84,29 @@ export const ExportModal: React.FC = () => {
     videoFile,
     serverVideoPath,
     showEmojis
-  } = useVideoStore();
+  } = useVideoStore(
+    useShallow((s) => ({
+      isExportModalOpen: s.isExportModalOpen,
+      setIsExportModalOpen: s.setIsExportModalOpen,
+      isExporting: s.isExporting,
+      setIsExporting: s.setIsExporting,
+      exportProgress: s.exportProgress,
+      setExportProgress: s.setExportProgress,
+      exportStatus: s.exportStatus,
+      exportResultUrl: s.exportResultUrl,
+      setExportResultUrl: s.setExportResultUrl,
+      transcript: s.transcript,
+      activeTemplateId: s.activeTemplateId,
+      customStyleOverrides: s.customStyleOverrides,
+      brollList: s.brollList,
+      aspectRatio: s.aspectRatio,
+      clips: s.clips,
+      selectedClipId: s.selectedClipId,
+      videoFile: s.videoFile,
+      serverVideoPath: s.serverVideoPath,
+      showEmojis: s.showEmojis,
+    }))
+  );
 
   const activeClip = selectedClipId ? clips.find(c => c.id === selectedClipId) : null;
 
