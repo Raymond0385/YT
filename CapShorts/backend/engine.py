@@ -2098,6 +2098,24 @@ def get_download_update_progress():
     with UPDATE_DOWNLOAD_LOCK:
         return dict(UPDATE_DOWNLOAD_STATE)
 
+def launch_detached_windows(cmd: List[str]) -> str:
+    """
+    Starts a program that has to keep running after Kadr exits (the update installer). The engine lives in a job
+    that Windows ends together with Kadr; the program is started outside of it. Returns how it was started.
+    """
+    CREATE_BREAKAWAY_FROM_JOB = 0x01000000
+    DETACHED_PROCESS = 0x00000008
+    CREATE_NEW_PROCESS_GROUP = 0x00000200
+    try:
+        subprocess.Popen(cmd, shell=False, close_fds=True,
+                         creationflags=CREATE_BREAKAWAY_FROM_JOB | DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP)
+        return "breakaway"
+    except OSError:
+        # The job does not allow leaving it (older Kadr): let Explorer start it, as its own child
+        explorer = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "explorer.exe")
+        subprocess.Popen([explorer, cmd[-1]], shell=False)      # explorer opens .exe and .msi files alike
+        return "explorer"
+
 @app.post("/api/system/launch-installer", dependencies=[Depends(verify_loopback_request)])
 def launch_installer():
     """Launches the downloaded installer (.exe, .msi, or .dmg)."""
@@ -2116,13 +2134,8 @@ def launch_installer():
     current_os = platform.system().lower()
     try:
         if current_os == "windows":
-            if file_path.lower().endswith(".msi"):
-                subprocess.Popen(["msiexec", "/i", file_path], shell=False)
-            else:
-                if hasattr(os, "startfile"):
-                    os.startfile(file_path)
-                else:
-                    subprocess.Popen([file_path], shell=False)
+            # The installer closes Kadr to replace its files, so it must not belong to the app's process group
+            launch_detached_windows(["msiexec", "/i", file_path] if file_path.lower().endswith(".msi") else [file_path])
         elif current_os == "darwin":
             subprocess.Popen(["open", file_path], shell=False)
         else:
