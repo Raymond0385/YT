@@ -1066,6 +1066,8 @@ class ExportPayload(BaseModel):
     # How a landscape video is fitted into a vertical frame: "auto" follows the speaker's face (and falls back to a
     # blurred background when there is no face to follow), "blur" always uses the blurred background.
     framing: Optional[str] = "auto"
+    # Hook title over the first seconds: {"text": str, "duration": seconds, "style": "box" | "dark" | "outline"}
+    title_overlay: Optional[Dict[str, Any]] = None
 
     @model_validator(mode="after")
     def validate_clip_range(self):
@@ -1139,7 +1141,8 @@ def run_export_job(task_id: str, payload: ExportPayload):
             preset=payload.preset,
             video_width=target_w,
             video_height=target_h,
-            custom_overrides=payload.custom_overrides
+            custom_overrides=payload.custom_overrides,
+            title_overlay=payload.title_overlay,
         )
         ass_path = os.path.join(TEMP_DIR, f"subtitles_{task_id}.ass")
         with open(ass_path, "w", encoding="utf-8") as f:

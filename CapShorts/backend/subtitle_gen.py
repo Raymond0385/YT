@@ -6,7 +6,7 @@ Dynamically scales font size, margins, and positioning across 9:16 Shorts, 16:9 
 
 import math
 import re
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from animation_specs import animation_tags
 
@@ -152,12 +152,48 @@ def compute_layout(style: Dict[str, Any], video_width: int, video_height: int) -
     }
 
 
+# Hook title shown over the first seconds of a short. Sizes are fractions of the canvas height, the same
+# numbers the editor preview uses (frontend/src/utils/titleOverlay.ts).
+TITLE_FONT_REL = 0.05
+TITLE_TOP_REL = 0.12
+TITLE_SIDE_REL = 0.07
+TITLE_PAD_REL = 0.012
+TITLE_MAX_CHARS = 120
+TITLE_STYLES = {
+    # name: (text colour, box/outline colour, ASS border style)
+    "box": ("#111111", "#FACC15", 3),
+    "dark": ("#FFFFFF", "#111111", 3),
+    "outline": ("#FFFFFF", "#000000", 1),
+}
+
+
+def title_overlay_ass(overlay: Optional[Dict[str, Any]], video_width: int, video_height: int,
+                      font_family: str) -> Tuple[Optional[str], Optional[str]]:
+    """(Style line, Dialogue line) for the hook title, or (None, None) when there is none."""
+    if not overlay:
+        return None, None
+    text = sanitize_ass_text(str(overlay.get("text", "")).strip())[:TITLE_MAX_CHARS]
+    if not text:
+        return None, None
+    duration = max(0.5, min(15.0, float(overlay.get("duration", 3.0) or 3.0)))
+    fg, bg, border = TITLE_STYLES.get(str(overlay.get("style", "box")), TITLE_STYLES["box"])
+    size = max(18, round(video_height * TITLE_FONT_REL))
+    side = round(video_width * TITLE_SIDE_REL)
+    top = round(video_height * TITLE_TOP_REL)
+    pad = max(2.0, video_height * TITLE_PAD_REL) if border == 3 else max(2.0, size * 0.08)
+    style = (f"Style: Title,{font_family},{size},{hex_to_ass_color(fg)},{hex_to_ass_color(fg)},{hex_to_ass_color(bg)},"
+             f"{hex_to_ass_color(bg)},-1,0,0,0,100,100,0,0,{border},{pad:.1f},0,8,{side},{side},{top},1")
+    event = f"Dialogue: 2,{format_ass_time(0)},{format_ass_time(duration)},Title,,0,0,0,,{{\\fad(150,250)}}{text}"
+    return style, event
+
+
 def generate_ass_subtitles(
     transcript: List[Dict[str, Any]],
     preset: Dict[str, Any],
     video_width: int = 1080,
     video_height: int = 1920,
-    custom_overrides: Optional[Dict[str, Any]] = None
+    custom_overrides: Optional[Dict[str, Any]] = None,
+    title_overlay: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Generates a full ASS subtitle file string from word timestamps and a preset style.
@@ -221,7 +257,12 @@ Style: Highlight,{font_family},{scaled_font_size},{highlight_color_ass},{primary
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
-    
+    # The title always uses Montserrat: bold, readable, with Cyrillic (some preset fonts have only Latin)
+    title_style, title_event = title_overlay_ass(title_overlay, video_width, video_height, resolve_font_family("Montserrat"))
+    if title_style:
+        header = header.replace("\n\n[Events]", f"\n{title_style}\n\n[Events]", 1)
+        header += title_event + "\n"
+
     if not transcript:
         return header
 

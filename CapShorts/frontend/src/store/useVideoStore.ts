@@ -79,7 +79,11 @@ interface VideoStoreState {
   applyProject: (project: ProjectFile) => void;
   /** Attaches the video file to an opened project without touching its captions, shorts and cuts. */
   attachProjectVideo: (file: File) => void;
-  updateClip: (id: string, changes: { title?: string; start?: number; end?: number }, edge?: 'start' | 'end') => void;
+  updateClip: (
+    id: string,
+    changes: { title?: string; start?: number; end?: number; titleText?: string; titleSeconds?: number; titleStyle?: 'box' | 'dark' | 'outline' },
+    edge?: 'start' | 'end',
+  ) => void;
   deleteClip: (id: string) => void;
   addClip: (start: number, end: number, title?: string) => string;
   /** Moves a short to start at `start`, keeping its length. */
@@ -629,6 +633,9 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
       if (c.id !== id) return c;
       const next = { ...c, custom: true };
       if (changes.title !== undefined) next.title = changes.title;
+      if (changes.titleText !== undefined) next.titleText = changes.titleText;
+      if (changes.titleSeconds !== undefined) next.titleSeconds = changes.titleSeconds;
+      if (changes.titleStyle !== undefined) next.titleStyle = changes.titleStyle;
       if (changes.start !== undefined || changes.end !== undefined) {
         const [s, e] = clampRange(
           changes.start ?? c.start,

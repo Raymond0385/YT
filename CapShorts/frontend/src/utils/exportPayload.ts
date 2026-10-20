@@ -1,5 +1,6 @@
 import { SubtitlePreset, VideoClip, WordToken, BrollClip } from '../types';
 import { buildEmojiEvents } from './emojiEvents';
+import { titleOverlayPayload } from './titleOverlay';
 
 /** How a landscape video is fitted into a vertical frame: follow the speaker's face, or a blurred background. */
 export type Framing = 'auto' | 'blur';
@@ -32,7 +33,7 @@ export interface ExportPayloadInput {
   resolution: '1080x1920' | '1920x1080' | '1080x1080';
   showEmojis: boolean;
   /** Export only this short; without it the whole video is exported. */
-  clip?: Pick<VideoClip, 'start' | 'end'> | null;
+  clip?: (Pick<VideoClip, 'start' | 'end'> & Partial<Pick<VideoClip, 'titleText' | 'titleSeconds' | 'titleStyle'>>) | null;
   framing?: Framing;
 }
 
@@ -57,6 +58,8 @@ export function buildExportPayload(input: ExportPayloadInput): Record<string, un
   if (input.clip) {
     payload.clip_start = input.clip.start;
     payload.clip_end = input.clip.end;
+    const title = titleOverlayPayload(input.clip);
+    if (title) payload.title_overlay = title;
   }
 
   // The emoji the preview shows above the subtitles, so the render matches it

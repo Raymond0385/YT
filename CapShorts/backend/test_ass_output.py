@@ -226,3 +226,21 @@ class TestBrollValidation(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_hook_title_is_a_top_box_over_the_first_seconds():
+    from subtitle_gen import generate_ass_subtitles, title_overlay_ass
+    words = [{"word": "hello", "start": 0.5, "end": 0.9}]
+    out = generate_ass_subtitles(words, {"fontFamily": "Montserrat"}, 1080, 1920,
+                                 title_overlay={"text": "3 mistakes {that} cost me", "duration": 4, "style": "box"})
+    style = next(l for l in out.splitlines() if l.startswith("Style: Title"))
+    fields = style.split(",")
+    assert fields[2] == "96" and fields[15] == "3" and fields[18] == "8"      # 5% of 1920, opaque box, top centre
+    event = next(l for l in out.splitlines() if ",Title," in l)
+    assert event.startswith("Dialogue: 2,0:00:00.00,0:00:04.00,Title")
+    assert event.endswith("3 mistakes that cost me") and "{that}" not in event
+    assert out.index("Style: Title") < out.index("[Events]")
+    assert title_overlay_ass({"text": "   "}, 1080, 1920, "Montserrat") == (None, None)
+    assert title_overlay_ass(None, 1080, 1920, "Montserrat") == (None, None)
+    outline = title_overlay_ass({"text": "x", "style": "outline", "duration": 99}, 1920, 1080, "Montserrat")
+    assert ",1," in outline[0] and "0:00:15.00" in outline[1]                  # outline style, duration capped

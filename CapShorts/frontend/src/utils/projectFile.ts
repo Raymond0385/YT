@@ -253,6 +253,11 @@ export function parseProject(text: string): ParseResult {
       keywords: Array.isArray(c.keywords) ? c.keywords.filter(isStr) : [],
       transcript_snippet: isStr(c.transcript_snippet) ? c.transcript_snippet : '',
       custom: Boolean(c.custom),
+      ...(c.tier === 'strong' || c.tier === 'good' || c.tier === 'fair' ? { tier: c.tier } : {}),
+      ...(isNum(c.rank) ? { rank: c.rank } : {}),
+      ...(isStr(c.titleText) && c.titleText ? { titleText: c.titleText.slice(0, 120) } : {}),
+      ...(isNum(c.titleSeconds) && c.titleSeconds > 0 ? { titleSeconds: Math.min(15, c.titleSeconds) } : {}),
+      ...(c.titleStyle === 'box' || c.titleStyle === 'dark' || c.titleStyle === 'outline' ? { titleStyle: c.titleStyle } : {}),
     }));
 
   const segments = cleanSegments(raw.videoSegments);

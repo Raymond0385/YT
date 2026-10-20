@@ -59,6 +59,10 @@ export interface VideoClip {
   tier?: 'strong' | 'good' | 'fair';
   /** 1 = the best short of the video */
   rank?: number;
+  /** Hook title shown over the first seconds of the short (empty = none) */
+  titleText?: string;
+  titleSeconds?: number;
+  titleStyle?: 'box' | 'dark' | 'outline';
 }
 
 export interface VideoSegment {

@@ -17,6 +17,7 @@ import {
   Upload
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
+import { TITLE_EM_PER_LINE, TITLE_FONT_REL, TITLE_PAD_REL, TITLE_SIDE_REL, TITLE_STYLES, TITLE_TOP_REL, titleVisibleAt } from '../../utils/titleOverlay';
 import { useVideoStore } from '../../store/useVideoStore';
 import { SubtitlePreset, WordToken } from '../../types';
 import templatesData from '../../data/templates.json';
@@ -582,6 +583,42 @@ export const CanvasPreview: React.FC = () => {
                 </div>
               </div>
             )}
+
+            {/* Hook title over the first seconds of the selected short (same geometry as the render) */}
+            {activeClip && titleVisibleAt(activeClip, currentTime) && (() => {
+              const st = TITLE_STYLES[activeClip.titleStyle || 'box'];
+              const linePx = TITLE_FONT_REL * stageH;
+              const fontPx = linePx * TITLE_EM_PER_LINE;
+              return (
+                <div
+                  className="absolute inset-x-0 z-30 flex justify-center pointer-events-none animate-fade"
+                  // libass wraps the text inside the side margins and draws the box around it, past them;
+                  // here the side padding of each line's box is taken off the margins to wrap the same way
+                  style={{ top: `${TITLE_TOP_REL * 100}%`, paddingInline: `${Math.max(0, TITLE_SIDE_REL * (stageSize.w || stageH * 9 / 16) - (st.background ? TITLE_PAD_REL * stageH * 1.4 : 0))}px` }}
+                  data-testid="title-overlay"
+                >
+                  <div className="text-center" style={{ lineHeight: `${linePx.toFixed(2)}px` }}>
+                  {/* inline, so each line gets its own box like libass draws it */}
+                  <span
+                    className="font-bold"
+                    style={{
+                      fontFamily: 'Montserrat, sans-serif',     // the render uses Montserrat for titles too
+                      fontSize: `${fontPx.toFixed(2)}px`,
+                      color: st.color,
+                      background: st.background ?? undefined,
+                      padding: st.background ? `${(TITLE_PAD_REL * stageH).toFixed(1)}px ${(TITLE_PAD_REL * stageH * 1.4).toFixed(1)}px` : undefined,
+                      WebkitTextStroke: st.outline ? `${Math.max(1, fontPx * 0.08).toFixed(1)}px ${st.outline}` : undefined,
+                      paintOrder: 'stroke fill',
+                      boxDecorationBreak: 'clone',
+                      WebkitBoxDecorationBreak: 'clone',
+                    }}
+                  >
+                    {activeClip.titleText}
+                  </span>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Subtitle Overlay */}
             {currentBlock && (

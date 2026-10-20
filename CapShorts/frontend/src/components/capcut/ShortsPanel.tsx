@@ -5,6 +5,7 @@ import { useVideoStore } from '../../store/useVideoStore';
 import { apiUrl } from '../../config';
 import { formatTime } from '../../utils/timeFormat';
 import { snapToWord, wordIndexesInRange } from '../../utils/clipEdit';
+import { suggestTitle, TITLE_DEFAULT_SECONDS, TITLE_STYLES, TitleStyle } from '../../utils/titleOverlay';
 import { buildExportPayload, shortFileName } from '../../utils/exportPayload';
 import { batchSummary, BatchItem, runBatchExport } from '../../utils/batchExport';
 import templatesData from '../../data/templates.json';
@@ -416,6 +417,50 @@ export const ShortsPanel: React.FC = () => {
                     <span>Title</span>
                     <input value={clip.title} onChange={(e) => updateClip(clip.id, { title: e.target.value })} className={`${inputCls} w-full`} data-testid="short-title" />
                   </label>
+
+                  <div className="space-y-1 p-2 rounded-lg bg-zinc-950/50 border border-white/[0.06]" data-testid="hook-title-editor">
+                    <div className="flex items-center justify-between text-[10px] text-zinc-400">
+                      <span>Hook title on screen (first seconds)</span>
+                      {!clip.titleText && clip.hook && (
+                        <button
+                          onClick={() => updateClip(clip.id, { titleText: suggestTitle(clip.hook) })}
+                          className="text-indigo-300 hover:text-white"
+                          data-testid="hook-title-suggest"
+                        >
+                          Suggest
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      value={clip.titleText || ''}
+                      maxLength={120}
+                      placeholder="e.g. 3 mistakes that cost me a year"
+                      onChange={(e) => updateClip(clip.id, { titleText: e.target.value })}
+                      onFocus={() => setCurrentTime(clip.start)}
+                      className={`${inputCls} w-full`}
+                      data-testid="hook-title"
+                    />
+                    {!!clip.titleText && (
+                      <div className="flex items-center gap-1.5">
+                        <select
+                          value={clip.titleSeconds || TITLE_DEFAULT_SECONDS}
+                          onChange={(e) => updateClip(clip.id, { titleSeconds: Number(e.target.value) })}
+                          className={`${inputCls} flex-1`}
+                          data-testid="hook-title-seconds"
+                        >
+                          {[2, 3, 4, 5, 7, 10].map((n) => <option key={n} value={n}>{n} s</option>)}
+                        </select>
+                        <select
+                          value={clip.titleStyle || 'box'}
+                          onChange={(e) => updateClip(clip.id, { titleStyle: e.target.value as TitleStyle })}
+                          className={`${inputCls} flex-1`}
+                          data-testid="hook-title-style"
+                        >
+                          {(Object.keys(TITLE_STYLES) as TitleStyle[]).map((k) => <option key={k} value={k}>{TITLE_STYLES[k].label}</option>)}
+                        </select>
+                      </div>
+                    )}
+                  </div>
 
                   {(['start', 'end'] as const).map((edge) => (
                     <div key={edge} className="space-y-1">
