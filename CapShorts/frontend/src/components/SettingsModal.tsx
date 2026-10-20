@@ -17,6 +17,7 @@ import {
 import { useShallow } from 'zustand/react/shallow';
 import { useVideoStore } from '../store/useVideoStore';
 import { apiUrl } from '../config';
+import { ReleaseInfo, downloadAndInstall, loadCheckOnStart, saveCheckOnStart } from '../utils/updater';
 
 export const SettingsModal: React.FC = () => {
   const {
@@ -121,6 +122,35 @@ export const SettingsModal: React.FC = () => {
     error?: string;
   } | null>(null);
   const [isDownloadingUpdate, setIsDownloadingUpdate] = useState(false);
+  const [checkOnStart, setCheckOnStart] = useState(loadCheckOnStart);
+  const [releases, setReleases] = useState<ReleaseInfo[] | null>(null);
+  const [releasesError, setReleasesError] = useState<string | null>(null);
+  const [rollback, setRollback] = useState<{ version: string; text: string; error?: boolean } | null>(null);
+
+  const loadReleases = async () => {
+    setReleasesError(null);
+    try {
+      const res = await fetch(apiUrl('/api/system/releases'));
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      setReleases(data.releases || []);
+    } catch (e: any) {
+      setReleasesError(e?.message || 'Could not load the versions');
+    }
+  };
+
+  const installVersion = (version: string) => {
+    if (!window.confirm(`Install Kadr ${version}? The installer will close Kadr and replace the current version. Your projects and settings stay.`)) return;
+    setRollback({ version, text: 'Starting the download...' });
+    void downloadAndInstall((p) => setRollback({
+      version,
+      error: p.phase === 'error',
+      text: p.phase === 'downloading' ? `Downloading ${version}... ${p.progress}%`
+        : p.phase === 'launching' ? 'Starting the installer...'
+        : p.phase === 'launched' ? `The installer of ${version} is open: it will close Kadr and install that version.`
+        : p.message || 'Failed',
+    }), version);
+  };
 
   const fetchUpdateStatus = async () => {
     setIsCheckingUpdate(true);
@@ -769,6 +799,48 @@ export const SettingsModal: React.FC = () => {
                     </a>
                   </div>
                 )}
+              </div>
+
+              {/* Check on start + earlier versions (rollback) */}
+              <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-4 space-y-3" data-testid="versions-panel">
+                <label className="flex items-center justify-between text-xs text-zinc-200">
+                  <span>Check for updates when Kadr starts</span>
+                  <input
+                    type="checkbox"
+                    checked={checkOnStart}
+                    onChange={(e) => { setCheckOnStart(e.target.checked); saveCheckOnStart(e.target.checked); }}
+                    data-testid="check-on-start"
+                  />
+                </label>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-zinc-200">Install another version</span>
+                  <button onClick={loadReleases} className="text-[11px] text-indigo-300 hover:text-white underline" data-testid="load-releases">
+                    {releases ? 'Refresh' : 'Show versions'}
+                  </button>
+                </div>
+                <p className="text-[10px] text-zinc-500">If something broke after an update, put the previous version back. Projects and settings are kept.</p>
+                {releasesError && <p className="text-[11px] text-red-400">{releasesError}</p>}
+                {releases && (
+                  <ul className="space-y-1">
+                    {releases.map((r) => (
+                      <li key={r.version} className="flex items-center justify-between text-[11px] text-zinc-300" data-testid="release-row">
+                        <span>v{r.version} <span className="text-zinc-500">{r.date}{r.size_mb ? ` · ${r.size_mb} MB` : ''}</span></span>
+                        {r.current ? (
+                          <span className="text-emerald-400 text-[10px]">installed</span>
+                        ) : (
+                          <button
+                            onClick={() => installVersion(r.version)}
+                            disabled={!!rollback && !rollback.error}
+                            className="px-2 py-0.5 rounded-md bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-[10px] text-zinc-200 disabled:opacity-40"
+                          >
+                            {r.older ? 'Roll back' : 'Install'}
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {rollback && <p className={`text-[11px] ${rollback.error ? 'text-red-400' : 'text-indigo-200'}`} data-testid="rollback-status">{rollback.text}</p>}
               </div>
 
               {/* Status Message Alert */}

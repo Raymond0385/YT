@@ -149,3 +149,5 @@ CapShorts/src-tauri/binaries/fonts/
 CapShorts/src-tauri/binaries/emoji/
 CapShorts/src-tauri/binaries/animations.json
 CapShorts/src-tauri/binaries/face/
+CapShorts/src-tauri/binaries/CHANGELOG.md
+CapShorts/backend/update_state.json

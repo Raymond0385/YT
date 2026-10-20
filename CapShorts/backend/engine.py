@@ -41,6 +41,7 @@ from subtitle_gen import generate_ass_subtitles, generate_srt_subtitles, generat
 import emoji_overlay as eo
 import groq_chunks as gc
 import media_store
+import updates
 import reframe
 from broll import search_pexels_videos, download_broll_clip, build_ffmpeg_broll_filter
 from clip_generator import detect_viral_clips
@@ -2046,6 +2047,7 @@ def get_update_status():
                 selected_asset_size = dmg_asset.get("size", 0)
     
     details = f"New version {latest_tag} is ready to install!" if update_available else "Kadr is up to date."
+    changes = remote_changes(latest_tag) if update_available else []
     
     return {
         "current_version": CURRENT_ENGINE_VERSION,
@@ -2058,6 +2060,7 @@ def get_update_status():
         "details": details,
         "release_title": release_title,
         "release_notes": release_notes,
+        "changes": changes,
         "release_url": release_url,
         "asset_name": selected_asset_name,
         "download_url": selected_download_url,
@@ -2067,6 +2070,91 @@ def get_update_status():
         "msi_download_url": msi_download_url or release_url,
         "dmg_download_url": dmg_download_url or release_url
     }
+
+def version_from_asset_name(name: str) -> Optional[str]:
+    m = re.search(r"(\d+\.\d+\.\d+)", name or "")
+    return m.group(1) if m else None
+
+RELEASES_CACHE: Dict[str, Any] = {"at": 0.0, "data": None}
+REMOTE_CHANGELOG_CACHE: Dict[str, Any] = {}
+
+def fetch_github_json(url: str, timeout: float = 10) -> Any:
+    req = urllib.request.Request(url, headers={"User-Agent": f"Kadr-Desktop-App/{CURRENT_ENGINE_VERSION}",
+                                               "Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+def fetch_releases() -> List[Dict[str, Any]]:
+    now = time.time()
+    if RELEASES_CACHE["data"] is not None and now - RELEASES_CACHE["at"] < 600:
+        return RELEASES_CACHE["data"]
+    data = fetch_github_json(f"https://api.github.com/repos/{UPDATE_REPO}/releases?per_page=20")
+    RELEASES_CACHE.update(at=now, data=data if isinstance(data, list) else [])
+    return RELEASES_CACHE["data"]
+
+def remote_changes(tag: str) -> List[Dict[str, str]]:
+    """What changed between this version and release `tag`, from that release's CHANGELOG.md."""
+    if tag not in REMOTE_CHANGELOG_CACHE:
+        url = f"https://raw.githubusercontent.com/{UPDATE_REPO}/{urllib.parse.quote(tag)}/CHANGELOG.md"
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": f"Kadr-Desktop-App/{CURRENT_ENGINE_VERSION}"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                REMOTE_CHANGELOG_CACHE[tag] = updates.parse_changelog(resp.read().decode("utf-8", errors="replace"))
+        except Exception as e:
+            print(f"[update] changelog of {tag} not available: {e}")
+            return []
+    return updates.changes_between(REMOTE_CHANGELOG_CACHE[tag], CURRENT_ENGINE_VERSION, tag.lstrip("v"))
+
+def local_changelog_sections() -> List[Dict[str, str]]:
+    path = updates.find_changelog([BASE_DIR, MEIPASS_DIR, os.path.join(BASE_DIR, ".."), os.path.join(BASE_DIR, "..", "..")])
+    if not path:
+        return []
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return updates.parse_changelog(f.read())
+    except OSError:
+        return []
+
+@app.get("/api/system/whats-new")
+def whats_new():
+    """After an update: what changed since the version the user saw last (read from the bundled CHANGELOG)."""
+    state = updates.load_state(DATA_DIR)
+    shown, new_state = updates.whats_new(state, CURRENT_ENGINE_VERSION, local_changelog_sections())
+    if new_state != state:
+        try:
+            updates.save_state(DATA_DIR, new_state)
+        except OSError as e:
+            print(f"[update] could not save the update state: {e}")
+    return shown
+
+@app.post("/api/system/whats-new/seen", dependencies=[Depends(verify_loopback_request), Depends(verify_local_origin)])
+def whats_new_seen():
+    updates.save_state(DATA_DIR, updates.mark_seen(updates.load_state(DATA_DIR), CURRENT_ENGINE_VERSION))
+    return {"success": True}
+
+@app.get("/api/system/releases")
+def list_releases():
+    """Recent releases with an installer for this computer: to roll back to an earlier version."""
+    try:
+        data = fetch_releases()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not reach GitHub: {e}")
+    return {"current_version": CURRENT_ENGINE_VERSION, "releases": updates.release_list(data, platform.system().lower(), CURRENT_ENGINE_VERSION)}
+
+class InstallVersionPayload(BaseModel):
+    version: str
+
+@app.post("/api/system/install-version", dependencies=[Depends(verify_loopback_request), Depends(verify_local_origin)])
+def install_version(payload: InstallVersionPayload):
+    """Downloads the installer of a given release (only one listed on GitHub for this repo), e.g. to roll back."""
+    try:
+        listed = updates.release_list(fetch_releases(), platform.system().lower(), CURRENT_ENGINE_VERSION, limit=50)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not reach GitHub: {e}")
+    match = next((r for r in listed if updates.semver(r["version"]) == updates.semver(payload.version)), None)
+    if not match:
+        raise HTTPException(status_code=404, detail="No installer for that version")
+    return start_download_update({"download_url": match["download_url"], "file_name": match["asset_name"], "version": match["version"]})
 
 @app.post("/api/system/download-update", dependencies=[Depends(verify_loopback_request)])
 def start_download_update(payload: Optional[Dict[str, Any]] = None):
@@ -2088,6 +2176,9 @@ def start_download_update(payload: Optional[Dict[str, Any]] = None):
     if not download_url:
         raise HTTPException(status_code=400, detail="No suitable update asset available for your platform.")
     
+    target = (payload or {}).get("version") or version_from_asset_name(file_name)
+    with UPDATE_DOWNLOAD_LOCK:
+        UPDATE_DOWNLOAD_STATE["target_version"] = target
     worker = threading.Thread(target=download_update_worker, args=(download_url, file_name), daemon=True)
     worker.start()
     return {"success": True, "message": "Download started.", "file_name": file_name}
@@ -2126,6 +2217,14 @@ def launch_installer():
     if status != "completed" or not file_path or not os.path.exists(file_path):
         raise HTTPException(status_code=400, detail="No completed update package ready to install.")
     
+    with UPDATE_DOWNLOAD_LOCK:
+        target_version = UPDATE_DOWNLOAD_STATE.get("target_version")
+    if target_version:
+        try:
+            updates.save_state(DATA_DIR, updates.mark_pending(updates.load_state(DATA_DIR), CURRENT_ENGINE_VERSION, target_version))
+        except OSError as e:
+            print(f"[update] could not remember the pending update: {e}")
+
     temp_dir = os.path.realpath(tempfile.gettempdir())
     real_path = os.path.realpath(file_path)
     if not real_path.startswith(temp_dir):

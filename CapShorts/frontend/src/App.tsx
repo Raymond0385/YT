@@ -8,6 +8,7 @@ import { PropertiesInspector } from './components/capcut/PropertiesInspector';
 import { CapCutTimeline } from './components/capcut/CapCutTimeline';
 import { ExportModal } from './components/ExportModal';
 import { SettingsModal } from './components/SettingsModal';
+import { UpdateNotices } from './components/UpdateNotices';
 import { useShallow } from 'zustand/react/shallow';
 import { useVideoStore } from './store/useVideoStore';
 
@@ -166,6 +167,7 @@ export const App: React.FC = () => {
       {/* Modals */}
       <ExportModal />
       <SettingsModal />
+      <UpdateNotices />
 
       {/* Modern Frosted Glass Transcription Loading Card */}
       {isTranscribing && (
