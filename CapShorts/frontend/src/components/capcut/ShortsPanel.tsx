@@ -6,7 +6,7 @@ import { apiUrl } from '../../config';
 import { formatTime } from '../../utils/timeFormat';
 import { snapToWord, wordIndexesInRange } from '../../utils/clipEdit';
 import { suggestTitle, TITLE_DEFAULT_SECONDS, TITLE_STYLES, TitleStyle } from '../../utils/titleOverlay';
-import { buildExportPayload, shortFileName } from '../../utils/exportPayload';
+import { buildExportPayload, editFromState } from '../../utils/exportPayload';
 import { batchSummary, BatchItem, runBatchExport } from '../../utils/batchExport';
 import { findPreset } from '../../utils/presets';
 import { exportFileName, ExportAllSettings, loadExportAllSettings, pickClips, saveExportAllSettings } from '../../utils/exportAllSettings';
@@ -131,6 +131,7 @@ export const ShortsPanel: React.FC = () => {
             resolution: ea.resolution,
             framing: ea.framing,
             clip: ea.hookTitle ? clip : { start: clip.start, end: clip.end },
+            edit: editFromState(useVideoStore.getState()),
           }),
         onUpdate: setBatchItems,
         shouldStop: () => stopRef.current,

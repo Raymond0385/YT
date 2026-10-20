@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { followLayout, useReframePlan } from '../../utils/reframePreview';
+import { TrackPreview } from './TrackPreview';
 import { Framing, loadFraming, saveFraming } from '../../utils/exportPayload';
 import { TITLE_EM_PER_LINE, TITLE_FONT_REL, TITLE_PAD_REL, TITLE_SIDE_REL, TITLE_STYLES, TITLE_TOP_REL, titleVisibleAt } from '../../utils/titleOverlay';
 import { useVideoStore } from '../../store/useVideoStore';
@@ -564,6 +565,9 @@ export const CanvasPreview: React.FC = () => {
               onEnded={() => setIsPlaying(false)}
               onClick={togglePlay}
             />
+
+            {/* Extra video layers, sounds and the fade to black, as in the export */}
+            <TrackPreview stageW={stageSize.w || stageH * 9 / 16} stageH={stageH} />
 
             {/* Safe Area Guides Overlay (TikTok / Reels / Shorts margin boundaries) */}
             {safeAreaGuides && (

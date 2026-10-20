@@ -43,6 +43,7 @@ import groq_chunks as gc
 import media_store
 import updates
 import reframe
+import timeline_render as tlr
 from broll import search_pexels_videos, download_broll_clip, build_ffmpeg_broll_filter
 from clip_generator import detect_viral_clips, summarize as clip_summary
 from groq_transcribe import transcribe_with_groq_pool
@@ -1068,6 +1069,15 @@ class ExportPayload(BaseModel):
     framing: Optional[str] = "auto"
     # Hook title over the first seconds: {"text": str, "duration": seconds, "style": "box" | "dark" | "outline"}
     title_overlay: Optional[Dict[str, Any]] = None
+    # The edit on the timeline (see timeline_render.py): which parts of the source play, in order, and how
+    segments: Optional[List[Dict[str, Any]]] = None
+    speed: Optional[float] = 1.0
+    volume: Optional[float] = 1.0
+    fade_in: Optional[float] = 0.0
+    fade_out: Optional[float] = 0.0
+    # Extra video layers and sounds: [{"kind": "video"|"audio", "volume", "muted", "items": [{"mediaId"|"path",
+    # "start", "duration", "sourceStart", "volume", "x", "y", "scale", "opacity", "fadeIn", "fadeOut"}]}]
+    tracks: Optional[List[Dict[str, Any]]] = None
 
     @model_validator(mode="after")
     def validate_clip_range(self):
@@ -1106,7 +1116,7 @@ def run_export_job(task_id: str, payload: ExportPayload):
                         "start": max(0.0, round(w_start - c_start, 2)),
                         "end": max(0.0, round(w_end - c_start, 2))
                     })
-            transcript_to_use = shifted if shifted else transcript_raw
+            transcript_to_use = shifted
         else:
             transcript_to_use = transcript_raw
 
@@ -1173,10 +1183,34 @@ def run_export_job(task_id: str, payload: ExportPayload):
 
         escaped_ass = ass_path.replace("\\", "/").replace(":", "\\:")
         
+        # The timeline: which source ranges play (cuts), how fast, and the window being exported
+        speed = tlr.clamp_speed(payload.speed)
+        source_len = probe_media_duration(input_video) or 0.0
+        all_ranges = tlr.clean_segments(payload.segments) or [(0.0, source_len or 1e9)]
+        has_cuts = not tlr.is_trivial(all_ranges, source_len or None)
+        timeline_len = sum(b - a for a, b in all_ranges)
+        win_start = payload.clip_start if is_clip_export else 0.0
+        win_end = payload.clip_end if is_clip_export else timeline_len
+        play_ranges = tlr.timeline_to_source_ranges(all_ranges, win_start, win_end) if has_cuts else [
+            (win_start, win_end if is_clip_export else (source_len or win_end))]
+        if not play_ranges:
+            raise RuntimeError("Nothing to export in this range of the timeline.")
+        src_from, src_to = play_ranges[0][0], play_ranges[-1][1]
+        out_len = tlr.output_duration(play_ranges, speed)
+
         trim_args = []
-        if is_clip_export:
-            clip_len = max(1.0, round(payload.clip_end - payload.clip_start, 2))
-            trim_args = ["-ss", str(payload.clip_start), "-t", str(clip_len)]
+        if is_clip_export or has_cuts:
+            trim_args = ["-ss", f"{src_from:.3f}", "-t", f"{max(0.1, src_to - src_from):.3f}"]
+
+        # Captions, emoji and B-roll are timed on the timeline; sped up, they come sooner
+        if abs(speed - 1.0) > 0.01:
+            transcript_to_use = tlr.scale_times(transcript_to_use, speed)
+            for b in downloaded_broll:
+                b["start"], b["end"] = b["start"] / speed, b["end"] / speed
+            with open(ass_path, "w", encoding="utf-8") as f:
+                f.write(generate_ass_subtitles(transcript=transcript_to_use, preset=payload.preset, video_width=target_w,
+                                               video_height=target_h, custom_overrides=payload.custom_overrides,
+                                               title_overlay=payload.title_overlay))
 
         is_landscape_input = (in_w > in_h)
 
@@ -1195,9 +1229,11 @@ def run_export_job(task_id: str, payload: ExportPayload):
             framing = "blur"
             if (payload.framing or "auto") != "blur":
                 update_task_state(EXPORT_TASKS, task_id, {"progress": 40, "status": "Finding the speaker..."})
-                span_from = payload.clip_start if is_clip_export else 0.0
-                span_to = payload.clip_end if is_clip_export else probe_media_duration(input_video)
+                span_from, span_to = src_from, src_to
                 plan = reframe.plan_reframe(input_video, span_from, span_to, in_w, in_h)
+                if plan["mode"] == "follow" and (has_cuts or abs(speed - 1.0) > 0.01):
+                    plan["xs"] = tlr.remap_camera_path(plan["xs"], plan["rate"], 0.0,
+                                                       [(a - span_from, b - span_from) for a, b in play_ranges], speed, out_len)
                 if plan["mode"] == "follow":
                     reframe_cmd_path = os.path.join(TEMP_DIR, f"reframe_{task_id}.txt")
                     with open(reframe_cmd_path, "w", encoding="utf-8") as f:
@@ -1232,11 +1268,11 @@ def run_export_job(task_id: str, payload: ExportPayload):
         emoji_graph = None
         if payload.emojis:
             try:
-                events = eo.shift_events(
+                events = tlr.scale_times(eo.shift_events(
                     payload.emojis,
                     payload.clip_start if is_clip_export else None,
                     payload.clip_end if is_clip_export else None,
-                )
+                ), speed)
                 emoji_dir = eo.find_emoji_dir([os.path.join(BASE_DIR, "emoji"), os.path.join(MEIPASS_DIR, "emoji")])
                 layout = compute_layout({**payload.preset, **(payload.custom_overrides or {})}, target_w, target_h)
                 emoji_inputs, emoji_graph = eo.build_overlay_graph(
@@ -1249,8 +1285,80 @@ def run_export_job(task_id: str, payload: ExportPayload):
                 print(f"[export] emoji overlay skipped: {emoji_err}")
                 emoji_inputs, filter_args, emoji_graph = [], plain_filter_args, None
 
+        # Extra tracks (picture in picture, music) and the main sound
+        track_items = tlr.clip_items(payload.tracks, win_start, win_end, speed)
+
+        def resolve_item(it: Dict[str, Any]) -> Optional[str]:
+            mid = it.get("mediaId")
+            if mid:
+                found = media_store.find(MEDIA_DIR, str(mid))
+                if found:
+                    return found
+            try:
+                return resolve_video_file(it.get("path")) if it.get("path") else None
+            except HTTPException:
+                return None
+
+        for kind in ("video", "audio"):
+            track_items[kind] = [dict(it, file=resolve_item(it)) for it in track_items[kind]]
+            missing = [it for it in track_items[kind] if not it["file"]]
+            if missing:
+                print(f"[export] {len(missing)} {kind} track item(s) skipped: media not found")
+            track_items[kind] = [it for it in track_items[kind] if it["file"]]
+        main_has_audio = probe_has_audio(input_video)
+        fade_in = max(0.0, min(5.0, float(payload.fade_in or 0.0)))
+        fade_out = max(0.0, min(5.0, float(payload.fade_out or 0.0)))
+        vol = float(payload.volume if payload.volume is not None else 1.0)
+        timeline_inputs = tlr.item_inputs(track_items["video"] + track_items["audio"], lambda it: it["file"])
+
+        def apply_timeline(fargs: List[str], inputs_before: int) -> List[str]:
+            """The timeline edit on top of one variant of the filters (cuts, speed, layers, fades, sound)."""
+            prefix = tlr.video_prefix(play_ranges, src_from, speed, has_cuts)
+            needs_audio = main_has_audio and (has_cuts or abs(speed - 1.0) > 0.01 or abs(vol - 1.0) > 0.01 or fade_in or fade_out)
+            if not (prefix or track_items["video"] or track_items["audio"] or fade_in or fade_out or needs_audio):
+                return fargs
+            args = list(fargs)
+            if "-vf" in args:                                    # same mapping as the other variants
+                i = args.index("-vf")
+                args[i:i + 2] = ["-filter_complex", f"[0:v]{args[i + 1]}[vfinal]", "-map", "[vfinal]", "-map", "0:a?"]
+            gi = args.index("-filter_complex") + 1
+            graph = args[gi]
+            if prefix:
+                uses = graph.count("[0:v]")
+                if uses == 1:
+                    graph = f"[0:v]{prefix}[vsrc];" + graph.replace("[0:v]", "[vsrc]")
+                elif uses > 1:
+                    names = "".join(f"[vsrc{k}]" for k in range(uses))
+                    graph = f"[0:v]{prefix},split={uses}{names};" + graph
+                    for k in range(uses):
+                        graph = graph.replace("[0:v]", f"[vsrc{k}]", 1)
+            cut = graph.rfind("[vfinal]")
+            graph = graph[:cut] + "[vbase]" + graph[cut + len("[vfinal]"):]
+            first_track_input = inputs_before
+            graph += ";" + tlr.overlay_graph(track_items["video"], first_track_input, target_w, target_h, "vbase", "vlayers")
+            fades = tlr.video_fades(fade_in, fade_out, out_len)
+            graph += f";[vlayers]{fades or 'null'}[vfinal]"
+            audio_first = first_track_input + len(track_items["video"])
+            main_label = None
+            if main_has_audio:
+                graph += ";[0:a]" + tlr.audio_chain(play_ranges, src_from, speed, has_cuts, vol, fade_in, fade_out, out_len) + "[amain]"
+                main_label = "amain"
+            if track_items["audio"] or main_label:
+                graph += ";" + tlr.audio_mix_graph(track_items["audio"], audio_first, main_label, "aout")
+                mi = args.index("0:a?") if "0:a?" in args else -1
+                if mi >= 0:
+                    args[mi] = "[aout]"
+                else:
+                    args += ["-map", "[aout]"]
+            args[gi] = graph
+            if not main_has_audio and track_items["audio"]:
+                args += ["-shortest"]
+            return args
+
         def command(inputs: List[str], fargs: List[str]) -> List[str]:
-            return [ffmpeg_bin, "-y"] + trim_args + ["-i", input_video] + extra_inputs + inputs + fargs
+            before = 1 + extra_inputs.count("-i") + inputs.count("-i")
+            return ([ffmpeg_bin, "-y"] + trim_args + ["-i", input_video] + extra_inputs + inputs + timeline_inputs
+                    + apply_timeline(fargs, before))
 
         base_cmd = command(emoji_inputs, filter_args)
         cmd = base_cmd + hw_args + ["-c:a", "aac", output_file]
@@ -1580,6 +1688,15 @@ def align_transcript(payload: AlignPayload):
 def glossary_transcript(payload: GlossaryPayload):
     """Fuzzy-replaces misheard words with user glossary terms (normalized Levenshtein)."""
     return {"words": apply_glossary(_dump_words(payload.words), payload.glossary, payload.threshold)}
+
+def probe_has_audio(path: str) -> bool:
+    """Whether the file has an audio stream (filters must not ask for one that is not there)."""
+    try:
+        out = subprocess.run([get_ffprobe_bin(), "-v", "error", "-select_streams", "a", "-show_entries", "stream=index",
+                              "-of", "csv=p=0", path], capture_output=True, text=True, timeout=30, **SUBPROCESS_EXTRA_KWARGS)
+        return bool(out.stdout.strip())
+    except Exception:
+        return True
 
 def resolve_video_file(path: Optional[str]) -> str:
     """Helper to resolve a video file path safely strictly within approved directories (TEMP_DIR, OUTPUT_DIR)."""

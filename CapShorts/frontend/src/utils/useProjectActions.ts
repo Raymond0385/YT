@@ -13,7 +13,7 @@ type Notice = { text: string; kind: 'ok' | 'error' } | null;
 /** The parts of the store that make a project "changed" (compared by reference, so it stays cheap). */
 const trackedSlices = (s: ReturnType<typeof useVideoStore.getState>) => [
   s.projectTitle, s.transcript, s.clips, s.videoSegments, s.activeTemplateId, s.customStyleOverrides,
-  s.brollList, s.aspectRatio, s.videoVolume, s.videoSpeed, s.videoScale, s.videoPosition,
+  s.brollList, s.aspectRatio, s.videoVolume, s.videoSpeed, s.videoScale, s.videoPosition, s.extraTracks, s.fadeIn, s.fadeOut,
   s.videoFitMode, s.showEmojis, s.glossary, s.exportSettings,
 ];
 

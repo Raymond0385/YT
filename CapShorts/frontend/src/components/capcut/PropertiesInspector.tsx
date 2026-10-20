@@ -30,6 +30,31 @@ const FONTS = [
   'Arial'
 ];
 
+/** Fade from / to black (and silence) at the start and the end of the export. */
+const FadeControls: React.FC = () => {
+  const fadeIn = useVideoStore((s) => s.fadeIn);
+  const fadeOut = useVideoStore((s) => s.fadeOut);
+  const setFade = useVideoStore((s) => s.setFade);
+  return (
+    <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-4 space-y-3" data-testid="fade-controls">
+      <h4 className="text-xs font-bold text-white">Fade in / out</h4>
+      {(['in', 'out'] as const).map((edge) => {
+        const value = edge === 'in' ? fadeIn : fadeOut;
+        return (
+          <div key={edge} className="space-y-1">
+            <div className="flex justify-between text-[11px] text-zinc-400">
+              <span>{edge === 'in' ? 'From black at the start' : 'To black at the end'}</span>
+              <span className="font-mono text-zinc-200">{value ? `${value.toFixed(1)} s` : 'off'}</span>
+            </div>
+            <input type="range" min="0" max="3" step="0.1" value={value} onChange={(e) => setFade(edge, parseFloat(e.target.value))}
+                   className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-400" data-testid={`fade-${edge}`} />
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 export const PropertiesInspector: React.FC = () => {
   const {
     activeInspectorTab,
@@ -688,6 +713,11 @@ export const PropertiesInspector: React.FC = () => {
                 />
               </div>
             </div>
+
+            <FadeControls />
+            <p className="text-[10px] text-zinc-500 px-1">
+              Music and voice-over: add an audio track under the timeline (+ Audio track), then + on the track.
+            </p>
           </div>
         )}
 

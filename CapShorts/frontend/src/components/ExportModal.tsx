@@ -3,7 +3,7 @@ import { X, Share2, CheckCircle2, Download, Sparkles, FolderDown, Zap, Flame, Lo
 import { useShallow } from 'zustand/react/shallow';
 import { useVideoStore } from '../store/useVideoStore';
 import { apiUrl } from '../config';
-import { buildExportPayload, Framing, loadFraming, saveFraming } from '../utils/exportPayload';
+import { buildExportPayload, editFromState, Framing, loadFraming, saveFraming } from '../utils/exportPayload';
 import { findPreset } from '../utils/presets';
 import { SubtitlePreset } from '../types';
 
@@ -203,6 +203,12 @@ export const ExportModal: React.FC = () => {
     }
   }, [activeClip]);
 
+  // Each time the window opens, the format follows the project (a short is always vertical)
+  useEffect(() => {
+    if (!isExportModalOpen) return;
+    setResolution(aspectRatio === '9:16' || activeClip ? '1080x1920' : aspectRatio === '16:9' ? '1920x1080' : '1080x1080');
+  }, [isExportModalOpen]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!isExportModalOpen) return null;
 
   const handleDownloadVideo = async () => {
@@ -315,6 +321,7 @@ export const ExportModal: React.FC = () => {
         showEmojis,
         clip: activeClip,
         framing,
+        edit: editFromState(useVideoStore.getState()),
       });
 
       const res = await fetch(apiUrl('/api/export'), {

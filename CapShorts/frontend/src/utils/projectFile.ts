@@ -1,5 +1,6 @@
 import { cleanPreset, findPreset, isUserPreset } from './presets';
-import { WordToken, VideoClip, VideoSegment, BrollClip, SubtitlePreset, AspectRatio, ExportSettings } from '../types';
+import { cleanTracks } from './tracks';
+import { WordToken, VideoClip, VideoSegment, BrollClip, SubtitlePreset, AspectRatio, ExportSettings, ExtraTrack } from '../types';
 
 export const PROJECT_FORMAT = 'kadr-project';
 /** Files saved before the app was renamed. */
@@ -63,6 +64,9 @@ export interface ProjectFile {
   customStyleOverrides: Partial<SubtitlePreset>;
   brollList: BrollClip[];
   videoVolume: number;
+  extraTracks: ExtraTrack[];
+  fadeIn: number;
+  fadeOut: number;
   videoSpeed: number;
   videoScale: number;
   videoPosition: { x: number; y: number };
@@ -94,6 +98,9 @@ export interface ProjectSource {
   customStyleOverrides: Partial<SubtitlePreset>;
   brollList: BrollClip[];
   videoVolume: number;
+  extraTracks?: ExtraTrack[];
+  fadeIn?: number;
+  fadeOut?: number;
   videoSpeed: number;
   videoScale: number;
   videoPosition: { x: number; y: number };
@@ -150,6 +157,9 @@ export function buildProject(src: ProjectSource, appVersion?: string): ProjectFi
     customStyleOverrides: src.customStyleOverrides,
     brollList: src.brollList,
     videoVolume: src.videoVolume,
+    extraTracks: src.extraTracks || [],
+    fadeIn: src.fadeIn || 0,
+    fadeOut: src.fadeOut || 0,
     videoSpeed: src.videoSpeed,
     videoScale: src.videoScale,
     videoPosition: src.videoPosition,
@@ -315,6 +325,9 @@ export function parseProject(text: string): ParseResult {
     customStyleOverrides: isObj(raw.customStyleOverrides) ? (raw.customStyleOverrides as Partial<SubtitlePreset>) : {},
     brollList: Array.isArray(raw.brollList) ? (raw.brollList.filter(isObj) as unknown as BrollClip[]) : [],
     videoVolume: isNum(raw.videoVolume) ? raw.videoVolume : 1,
+    extraTracks: cleanTracks(raw.extraTracks),
+    fadeIn: isNum(raw.fadeIn) ? Math.min(5, Math.max(0, raw.fadeIn)) : 0,
+    fadeOut: isNum(raw.fadeOut) ? Math.min(5, Math.max(0, raw.fadeOut)) : 0,
     videoSpeed: isNum(raw.videoSpeed) && raw.videoSpeed > 0 ? raw.videoSpeed : 1,
     videoScale: isNum(raw.videoScale) ? raw.videoScale : 1,
     videoPosition: { x: isNum(pos.x) ? pos.x : 0, y: isNum(pos.y) ? pos.y : 0 },

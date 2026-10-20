@@ -65,6 +65,39 @@ export interface VideoClip {
   titleStyle?: 'box' | 'dark' | 'outline';
 }
 
+/** A piece of media on an extra track (a picture-in-picture video or a sound). Times in seconds. */
+export interface TrackItem {
+  id: string;
+  name: string;
+  /** The engine's kept copy (survives restarts) */
+  mediaId?: string;
+  /** The engine's temporary copy */
+  path?: string;
+  /** Timeline position and length */
+  start: number;
+  duration: number;
+  /** In-point inside the media */
+  sourceStart: number;
+  mediaDuration: number;
+  volume: number;
+  /** Video layers: centre as fractions of the frame, width as a fraction of the frame width */
+  x: number;
+  y: number;
+  scale: number;
+  opacity: number;
+  fadeIn: number;
+  fadeOut: number;
+}
+
+export interface ExtraTrack {
+  id: string;
+  kind: 'video' | 'audio';
+  name: string;
+  muted: boolean;
+  volume: number;
+  items: TrackItem[];
+}
+
 export interface VideoSegment {
   id: string;
   name: string;

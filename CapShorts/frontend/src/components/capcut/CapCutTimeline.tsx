@@ -29,6 +29,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { useVideoStore } from '../../store/useVideoStore';
 import { WordToken, VideoSegment, VideoClip } from '../../types';
 import { snapToWord } from '../../utils/clipEdit';
+import { ExtraTrackHeaders, ExtraTrackLanes, TrackDragMode, TrackItemBar } from './ExtraTracks';
+import { ExtraTrack, TrackItem } from '../../types';
 import { formatTimecode } from '../../utils/timeFormat';
 
 /* ==========================================================================
@@ -564,6 +566,8 @@ export const CapCutTimeline: React.FC = () => {
   // A short being dragged on the timeline: what is dragged and where in the short it was grabbed
   const [clipDrag, setClipDrag] = useState<{ id: string; mode: ClipDragMode; grab: number; moved: boolean } | null>(null);
   const draggedRef = useRef(false);   // the click that ends a drag must not jump the playhead
+  // A piece of media on an extra track being dragged
+  const [trackDrag, setTrackDrag] = useState<{ trackId: string; itemId: string; mode: TrackDragMode; grab: number } | null>(null);
 
   // Viewport geometry state for virtualization (no forced clientWidth in loop)
   const [scrollLeft, setScrollLeft] = useState(0);
@@ -765,6 +769,52 @@ export const CapCutTimeline: React.FC = () => {
       document.body.style.userSelect = '';
     };
   }, [clipDrag, getTimeFromMouseEvent, moveClip, updateClip, setCurrentTime]);
+
+  const handleTrackDragStart = useCallback((track: ExtraTrack, item: TrackItem, mode: TrackDragMode, e: React.MouseEvent) => {
+    e.preventDefault();
+    if (scrollContainerRef.current) {
+      containerLeftRef.current = scrollContainerRef.current.getBoundingClientRect().left;
+    }
+    setIsPlaying(false);
+    useVideoStore.getState().selectTrackItem({ trackId: track.id, itemId: item.id });
+    setTrackDrag({ trackId: track.id, itemId: item.id, mode, grab: getTimeFromMouseEvent(e) - item.start });
+  }, [getTimeFromMouseEvent, setIsPlaying]);
+
+  useEffect(() => {
+    if (!trackDrag) return;
+    document.body.style.cursor = trackDrag.mode === 'move' ? 'grabbing' : 'ew-resize';
+    document.body.style.userSelect = 'none';
+    let raf: number | null = null;
+    let pending: number | null = null;
+    const apply = () => {
+      raf = null;
+      if (pending === null) return;
+      const t = pending;
+      pending = null;
+      const st = useVideoStore.getState();
+      if (trackDrag.mode === 'move') st.moveTrackItem(trackDrag.trackId, trackDrag.itemId, t - trackDrag.grab);
+      else st.trimTrackItem(trackDrag.trackId, trackDrag.itemId, trackDrag.mode, t);
+    };
+    const onMove = (e: MouseEvent) => {
+      e.preventDefault();
+      pending = getTimeFromMouseEvent(e);
+      if (raf === null) raf = requestAnimationFrame(apply);
+    };
+    const onUp = () => {
+      if (raf !== null) cancelAnimationFrame(raf);
+      apply();
+      setTrackDrag(null);
+    };
+    window.addEventListener('mousemove', onMove, { passive: false });
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      if (raf !== null) cancelAnimationFrame(raf);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [trackDrag, getTimeFromMouseEvent]);
 
   // Handle video segment click (Blade split or selection)
   const handleSegmentClick = useCallback((seg: VideoSegment, e: React.MouseEvent) => {
@@ -992,11 +1042,13 @@ export const CapCutTimeline: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Tracks Workspace (Smooth 60 FPS Virtualized Canvas) */}
+      {!isMinimized && <TrackItemBar />}
+
+      {/* Main Tracks Workspace (Smooth 60 FPS Virtualized Canvas); scrolls down when there are many tracks */}
       {!isMinimized && (
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex overflow-y-auto overflow-x-hidden">
           {/* Left Track Headers Column */}
-          <div className="w-32 border-r border-white/[0.08] bg-[#0c0c0f] flex flex-col flex-shrink-0 z-20 select-none shadow-md">
+          <div className="w-32 h-fit min-h-full border-r border-white/[0.08] bg-[#0c0c0f] flex flex-col flex-shrink-0 z-20 select-none shadow-md">
             {/* Ruler Corner Spacer */}
             <div className="h-7 border-b border-white/[0.08] bg-zinc-950/70 flex items-center justify-between px-3 text-[10px] text-zinc-400 font-mono">
               <span className="font-semibold text-zinc-300">TRACKS</span>
@@ -1056,6 +1108,8 @@ export const CapCutTimeline: React.FC = () => {
                 {track3Locked ? <Lock className="w-3 h-3 text-amber-400" /> : <Unlock className="w-3 h-3" />}
               </button>
             </div>
+
+            <ExtraTrackHeaders />
           </div>
 
           {/* Right Scrollable Timeline Canvas */}
@@ -1078,7 +1132,7 @@ export const CapCutTimeline: React.FC = () => {
                 setBladeHoverTime(null);
               }
             }}
-            className={`flex-1 overflow-x-auto overflow-y-hidden relative bg-[#09090c] ${
+            className={`flex-1 h-fit min-h-full overflow-x-auto overflow-y-hidden relative bg-[#09090c] ${
               isBladeActive ? 'cursor-crosshair' : 'cursor-default'
             }`}
             onClick={(e) => {
@@ -1094,7 +1148,7 @@ export const CapCutTimeline: React.FC = () => {
           >
             <div
               style={{ width: `${timelineWidth}px` }}
-              className="h-full relative flex flex-col"
+              className="min-h-full relative flex flex-col"
             >
               {/* Interactive Razor / Scissors Guide Line */}
               {isBladeActive && bladeHoverX !== null && (
@@ -1153,6 +1207,9 @@ export const CapCutTimeline: React.FC = () => {
                 duration={duration}
                 timelineZoom={timelineZoom}
               />
+
+              {/* 4b. Extra video layers and sounds */}
+              <ExtraTrackLanes timelineZoom={timelineZoom} onDragStart={handleTrackDragStart} />
 
               {/* 5. GPU Hardware-Accelerated Playhead (Drag Handle & Line) */}
               <TimelinePlayhead

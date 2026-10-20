@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import { apiUrl } from '../config';
 import { clampRange, describeClipRange, moveRange, splitRange } from '../utils/clipEdit';
+import { moveItem, newItem, newTrack, trimItem } from '../utils/tracks';
 import { findPreset, isUserPreset, loadUserPresets, makeUserPreset, MAX_USER_PRESETS, storeUserPresets } from '../utils/presets';
 import { createHistory } from '../utils/history';
 import { ProjectFile, ProjectVideoRef, videoMatches } from '../utils/projectFile';
-import { WordToken, SubtitlePreset, BrollClip, VideoClip, VideoSegment, AspectRatio, EngineHealth, ExportSettings } from '../types';
+import { WordToken, SubtitlePreset, BrollClip, VideoClip, VideoSegment, AspectRatio, EngineHealth, ExportSettings, ExtraTrack, TrackItem } from '../types';
 
 interface VideoStoreState {
   // Media State
@@ -21,6 +22,22 @@ interface VideoStoreState {
   // Subtitle / Words
   transcript: WordToken[];
   activeTemplateId: string;
+  /** Extra video layers and sounds on the timeline */
+  extraTracks: ExtraTrack[];
+  selectedTrackItem: { trackId: string; itemId: string } | null;
+  /** Fade from / to black at the start / end of the export (seconds) */
+  fadeIn: number;
+  fadeOut: number;
+  setFade: (edge: 'in' | 'out', seconds: number) => void;
+  addTrack: (kind: ExtraTrack['kind']) => string;
+  updateTrack: (trackId: string, changes: Partial<Pick<ExtraTrack, 'name' | 'muted' | 'volume'>>) => void;
+  removeTrack: (trackId: string) => void;
+  addTrackItem: (trackId: string, media: { name: string; mediaId?: string; path?: string; duration: number }, start: number) => string | null;
+  updateTrackItem: (trackId: string, itemId: string, changes: Partial<TrackItem>) => void;
+  moveTrackItem: (trackId: string, itemId: string, start: number) => void;
+  trimTrackItem: (trackId: string, itemId: string, edge: 'start' | 'end', time: number) => void;
+  removeTrackItem: (trackId: string, itemId: string) => void;
+  selectTrackItem: (sel: { trackId: string; itemId: string } | null) => void;
   /** Styles the user saved (also kept in the browser storage) */
   userPresets: SubtitlePreset[];
   /** Saves the style in use (preset + tweaks) as a new preset and switches to it. Returns its id. */
@@ -234,6 +251,45 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
 
   transcript: [],
   activeTemplateId: 'mrbeast-yellow-pop',
+  extraTracks: [],
+  selectedTrackItem: null,
+  fadeIn: 0,
+  fadeOut: 0,
+  setFade: (edge, seconds) => set(edge === 'in' ? { fadeIn: Math.max(0, Math.min(5, seconds)) } : { fadeOut: Math.max(0, Math.min(5, seconds)) }),
+  addTrack: (kind) => {
+    const track = newTrack(kind, get().extraTracks.filter((t) => t.kind === kind).length);
+    set((s) => ({ extraTracks: [...s.extraTracks, track] }));
+    return track.id;
+  },
+  updateTrack: (trackId, changes) => set((s) => ({ extraTracks: s.extraTracks.map((t) => (t.id === trackId ? { ...t, ...changes } : t)) })),
+  removeTrack: (trackId) => set((s) => ({
+    extraTracks: s.extraTracks.filter((t) => t.id !== trackId),
+    selectedTrackItem: s.selectedTrackItem?.trackId === trackId ? null : s.selectedTrackItem,
+  })),
+  addTrackItem: (trackId, media, start) => {
+    const track = get().extraTracks.find((t) => t.id === trackId);
+    if (!track) return null;
+    const item = newItem(track.kind, media, start);
+    set((s) => ({
+      extraTracks: s.extraTracks.map((t) => (t.id === trackId ? { ...t, items: [...t.items, item].sort((a, b) => a.start - b.start) } : t)),
+      selectedTrackItem: { trackId, itemId: item.id },
+    }));
+    return item.id;
+  },
+  updateTrackItem: (trackId, itemId, changes) => set((s) => ({
+    extraTracks: s.extraTracks.map((t) => (t.id !== trackId ? t : { ...t, items: t.items.map((i) => (i.id === itemId ? { ...i, ...changes, id: i.id } : i)) })),
+  })),
+  moveTrackItem: (trackId, itemId, start) => set((s) => ({
+    extraTracks: s.extraTracks.map((t) => (t.id !== trackId ? t : { ...t, items: t.items.map((i) => (i.id === itemId ? moveItem(i, start) : i)) })),
+  })),
+  trimTrackItem: (trackId, itemId, edge, time) => set((s) => ({
+    extraTracks: s.extraTracks.map((t) => (t.id !== trackId ? t : { ...t, items: t.items.map((i) => (i.id === itemId ? trimItem(i, edge, time) : i)) })),
+  })),
+  removeTrackItem: (trackId, itemId) => set((s) => ({
+    extraTracks: s.extraTracks.map((t) => (t.id !== trackId ? t : { ...t, items: t.items.filter((i) => i.id !== itemId) })),
+    selectedTrackItem: s.selectedTrackItem?.itemId === itemId ? null : s.selectedTrackItem,
+  })),
+  selectTrackItem: (sel) => set({ selectedTrackItem: sel }),
   userPresets: typeof window !== 'undefined' ? loadUserPresets() : [],
   saveUserPreset: (name) => {
     const { activeTemplateId, customStyleOverrides, userPresets } = get();
@@ -605,6 +661,10 @@ export const useVideoStore = create<VideoStoreState>((set, get) => ({
         ? (() => { const list = [project.customPreset!, ...state.userPresets]; storeUserPresets(list); return { userPresets: list }; })()
         : {}),
       customStyleOverrides: project.customStyleOverrides,
+      extraTracks: project.extraTracks,
+      fadeIn: project.fadeIn,
+      fadeOut: project.fadeOut,
+      selectedTrackItem: null,
       brollList: project.brollList,
       videoVolume: project.videoVolume,
       videoSpeed: project.videoSpeed,
@@ -1319,7 +1379,7 @@ export const history = createHistory<VideoStoreState>({
   keys: [
     'projectTitle', 'transcript', 'clips', 'videoSegments', 'activeTemplateId', 'customStyleOverrides',
     'brollList', 'aspectRatio', 'videoVolume', 'videoSpeed', 'videoScale', 'videoPosition', 'videoFitMode',
-    'showEmojis', 'silenceRegions', 'removedSilenceDuration', 'silenceBackup',
+    'showEmojis', 'silenceRegions', 'removedSilenceDuration', 'silenceBackup', 'extraTracks', 'fadeIn', 'fadeOut',
   ],
   passiveKeys: ['duration'],
   quietMs: 500,

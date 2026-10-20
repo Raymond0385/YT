@@ -1,4 +1,5 @@
-import { SubtitlePreset, VideoClip, WordToken, BrollClip } from '../types';
+import { SubtitlePreset, VideoClip, WordToken, BrollClip, ExtraTrack, VideoSegment } from '../types';
+import { tracksPayload } from './tracks';
 import { buildEmojiEvents } from './emojiEvents';
 import { titleOverlayPayload } from './titleOverlay';
 
@@ -35,10 +36,17 @@ export interface ExportPayloadInput {
   /** Export only this short; without it the whole video is exported. */
   clip?: (Pick<VideoClip, 'start' | 'end'> & Partial<Pick<VideoClip, 'titleText' | 'titleSeconds' | 'titleStyle'>>) | null;
   framing?: Framing;
+  /** The timeline edit: cuts, speed, volume, fades and extra tracks (default: none) */
+  edit?: { segments?: VideoSegment[]; speed?: number; volume?: number; fadeIn?: number; fadeOut?: number; tracks?: ExtraTrack[] };
 }
 
 export function aspectForResolution(resolution: ExportPayloadInput['resolution']): '9:16' | '16:9' | '1:1' {
   return resolution === '1080x1920' ? '9:16' : resolution === '1920x1080' ? '16:9' : '1:1';
+}
+
+/** The timeline edit of the store, as buildExportPayload's `edit`. */
+export function editFromState(s: { videoSegments: VideoSegment[]; videoSpeed: number; videoVolume: number; fadeIn: number; fadeOut: number; extraTracks: ExtraTrack[] }) {
+  return { segments: s.videoSegments, speed: s.videoSpeed, volume: s.videoVolume, fadeIn: s.fadeIn, fadeOut: s.fadeOut, tracks: s.extraTracks };
 }
 
 /** The body of POST /api/export. Shared by the export window and the batch export so both render the same way. */
@@ -54,6 +62,17 @@ export function buildExportPayload(input: ExportPayloadInput): Record<string, un
     aspect_ratio: aspectForResolution(input.resolution),
     framing: input.framing ?? loadFraming(),
   };
+
+  const e = input.edit;
+  if (e) {
+    if (e.segments && e.segments.length) payload.segments = e.segments.map((s) => ({ sourceStart: s.sourceStart, sourceEnd: s.sourceEnd }));
+    if (e.speed && Math.abs(e.speed - 1) > 0.01) payload.speed = e.speed;
+    if (e.volume !== undefined && Math.abs(e.volume - 1) > 0.01) payload.volume = e.volume;
+    if (e.fadeIn) payload.fade_in = e.fadeIn;
+    if (e.fadeOut) payload.fade_out = e.fadeOut;
+    const tracks = tracksPayload(e.tracks || []);
+    if (tracks.length) payload.tracks = tracks;
+  }
 
   if (input.clip) {
     payload.clip_start = input.clip.start;
