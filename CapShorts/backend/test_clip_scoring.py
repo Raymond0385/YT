@@ -96,7 +96,7 @@ def test_russian_hook_scores_higher_with_question_and_trigger_words():
     hooky = build(["Почему никто не рассказывает этот секрет про деньги?"], 1)
     assert hook_score(hooky, ru) > hook_score(flat, ru) + 20
     assert score_hook(hooky, ru) == hook_score(hooky, ru)
-    assert hook_score([], ru) == 50.0
+    assert hook_score([], ru) == 25.0          # a hook with nothing in it is weak
 
 
 def _score(words, start=0.0, end=None, **kw):
@@ -154,3 +154,41 @@ def test_scores_stay_in_range():
         for end in (20.0, 40.0, 60.0):
             score, _ = _score(words, end=end)
             assert 1 <= score <= 99
+
+
+def _talk(sentences, minutes, seed):
+    import random
+    r = random.Random(seed)
+    words, t = [], 0.0
+    while t < minutes * 60:
+        for tok in r.choice(sentences).split():
+            words.append({"word": tok, "start": round(t, 2), "end": round(t + 0.32, 2), "keyword": False})
+            t += 0.40
+        t += r.choice([0.3, 0.7, 1.0])
+    return words, t
+
+
+BORING_RU = ["Ну вот значит мы тут сидим и разговариваем.", "В общем это так, в целом нормально.",
+             "Короче там было всё как обычно и ничего особенного.", "Значит так, вот, ну да, примерно так оно и было."]
+
+
+def test_automatic_count_grows_with_the_video_and_follows_its_quality():
+    from clip_generator import summarize
+    short_w, short_d = _talk(RU_SENTENCES, 3, 1)
+    long_w, long_d = _talk(RU_SENTENCES, 30, 2)
+    boring_w, boring_d = _talk(BORING_RU, 30, 3)
+    short, long_, boring = (detect_viral_clips(w, d) for w, d in ((short_w, short_d), (long_w, long_d), (boring_w, boring_d)))
+    assert 1 <= len(short) <= 3
+    assert len(long_) >= 10 and len(long_) > len(short)
+    assert len(boring) < len(long_) / 2                       # rambling gives far fewer shorts...
+    assert all(c["tier"] != "strong" for c in boring)         # ...and none of them strong
+    s = summarize(long_, long_d, auto=True)
+    assert s["count"] == len(long_) and s["strong"] + s["good"] + s["fair"] == s["count"]
+    assert sorted(c["rank"] for c in long_) == list(range(1, len(long_) + 1))
+    for a, b in zip(long_, long_[1:]):                       # in time order, overlapping by 3 s at most
+        assert b["start"] >= a["start"] and a["end"] - b["start"] <= 3.0
+
+
+def test_a_number_asked_for_is_respected():
+    w, d = _talk(RU_SENTENCES, 30, 4)
+    assert len(detect_viral_clips(w, d, target_clips_count=3)) == 3

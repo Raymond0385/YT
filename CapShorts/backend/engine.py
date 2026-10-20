@@ -44,7 +44,7 @@ import media_store
 import updates
 import reframe
 from broll import search_pexels_videos, download_broll_clip, build_ffmpeg_broll_filter
-from clip_generator import detect_viral_clips
+from clip_generator import detect_viral_clips, summarize as clip_summary
 from groq_transcribe import transcribe_with_groq_pool
 from transliterate import transliterate_transcript, transliterate_word
 import youtube_download as yt
@@ -1018,7 +1018,8 @@ class GenerateClipsPayload(BaseModel):
     duration: float = Field(ge=0.0)
     min_clip_duration: Optional[float] = Field(default=25.0, gt=0.0)
     max_clip_duration: Optional[float] = Field(default=60.0, gt=0.0)
-    target_clips_count: Optional[int] = Field(default=5, ge=1)
+    # None: as many shorts as the video gives (automatic)
+    target_clips_count: Optional[int] = Field(default=None, ge=1)
 
     @model_validator(mode="after")
     def validate_durations(self):
@@ -1036,10 +1037,11 @@ def generate_clips_endpoint(payload: GenerateClipsPayload):
         total_duration=payload.duration,
         min_clip_duration=payload.min_clip_duration if payload.min_clip_duration is not None else 25.0,
         max_clip_duration=payload.max_clip_duration if payload.max_clip_duration is not None else 60.0,
-        target_clips_count=payload.target_clips_count if payload.target_clips_count is not None else 5,
+        target_clips_count=payload.target_clips_count,
         api_keys=get_master_groq_keys()
     )
-    return {"status": "success", "clips": clips}
+    return {"status": "success", "clips": clips,
+            "summary": clip_summary(clips, payload.duration, auto=payload.target_clips_count is None)}
 
 @app.get("/api/broll/search")
 def broll_search(keyword: str, api_key: Optional[str] = None, x_pexels_key: Optional[str] = Header(None)):

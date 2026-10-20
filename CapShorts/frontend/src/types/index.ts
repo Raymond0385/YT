@@ -55,6 +55,10 @@ export interface VideoClip {
   transcript_snippet: string;
   /** true for shorts the user created or edited by hand */
   custom?: boolean;
+  /** quality tier from the detection: strong >= 75, good >= 62, fair below */
+  tier?: 'strong' | 'good' | 'fair';
+  /** 1 = the best short of the video */
+  rank?: number;
 }
 
 export interface VideoSegment {

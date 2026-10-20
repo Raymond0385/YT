@@ -8,7 +8,7 @@ import math
 import uuid
 from typing import List, Dict, Any, Optional
 
-from clip_scoring import get_pack, score_candidate, hook_score, detect_language, PACKS, _norm as _norm_token
+from clip_scoring import get_pack, score_candidate, hook_score, detect_language, tier_for, PACKS, _norm as _norm_token
 
 VIRAL_HOOK_TRIGGERS = {
     # High curiosity / mystery hooks
@@ -277,17 +277,68 @@ def score_hook(sentence_words: List[Any], pack: Optional[Dict[str, Any]] = None)
 
 MAX_TRANSCRIPT_WORDS = 15000
 
+# Automatic number of shorts: the distinct moments that are good enough, judged against the best one,
+# and not more than one per AUTO_SECONDS_PER_SHORT of video (a long video gives more, a short one fewer)
+AUTO_MIN_SCORE = 62
+AUTO_MAX_BELOW_BEST = 25
+AUTO_SECONDS_PER_SHORT = 120.0
+AUTO_MAX_SHORTS = 40
+MAX_OVERLAP = 3.0           # two shorts may share at most this many seconds
+
+
+def auto_limit(total_duration: float) -> int:
+    return max(1, min(AUTO_MAX_SHORTS, int(round(total_duration / AUTO_SECONDS_PER_SHORT))))
+
+
+def select_clips(candidates: List[Dict[str, Any]], count: Optional[int], total_duration: float = 0.0) -> List[Dict[str, Any]]:
+    """
+    Best non-overlapping candidates. With `count` the top `count`; without it (automatic) the candidates
+    scoring at least AUTO_MIN_SCORE and within AUTO_MAX_BELOW_BEST of the best one, at most auto_limit()
+    of them (always at least one).
+    """
+    ranked = sorted(candidates, key=lambda c: (-c["virality_score"], c["start"]))
+    if not ranked:
+        return []
+    bar = None if count else max(AUTO_MIN_SCORE, ranked[0]["virality_score"] - AUTO_MAX_BELOW_BEST)
+    if not count:
+        count = auto_limit(total_duration or max(c["end"] for c in ranked))
+    selected: List[Dict[str, Any]] = []
+    for cand in ranked:
+        if count and len(selected) >= count:
+            break
+        if bar is not None and cand["virality_score"] < bar and selected:
+            break
+        if any(min(cand["end"], s["end"]) - max(cand["start"], s["start"]) > MAX_OVERLAP for s in selected):
+            continue
+        selected.append(cand)
+    return selected
+
+
+def summarize(clips: List[Dict[str, Any]], total_duration: float, auto: bool) -> Dict[str, Any]:
+    """What the user sees first: how many shorts the whole video gives and how good they are."""
+    tiers = {"strong": 0, "good": 0, "fair": 0}
+    for c in clips:
+        tiers[c.get("tier") or tier_for(c.get("virality_score", 0))] += 1
+    return {
+        "count": len(clips),
+        **tiers,
+        "auto": auto,
+        "video_duration": round(total_duration, 1),
+        "covered_seconds": round(sum(c["end"] - c["start"] for c in clips), 1),
+    }
+
 def detect_viral_clips(
     words: List[Any],
     total_duration: float,
     min_clip_duration: float = 25.0,
     max_clip_duration: float = 60.0,
-    target_clips_count: int = 5,
+    target_clips_count: Optional[int] = None,
     api_keys: Optional[List[str]] = None
 ) -> List[Dict[str, Any]]:
     """
     Scans word transcript with millisecond accuracy, detects natural sentence boundaries,
     and extracts complete, self-contained viral shorts without cutting off mid-sentence.
+    target_clips_count None (default): as many as the video gives (see select_clips).
     """
     if not words or total_duration <= 0:
         return []
@@ -305,6 +356,7 @@ def detect_viral_clips(
             "end": round(total_duration, 2),
             "duration": max(0.1, round(total_duration, 1)),
             "virality_score": 75,
+            "tier": tier_for(75),
             "keywords": [get_w_word(w) for w in words if get_w_keyword(w)][:5],
             "transcript_snippet": " ".join(get_w_word(w) for w in words[:25]) + ("..." if len(words) > 25 else "")
         }]
@@ -347,7 +399,6 @@ def detect_viral_clips(
                     actual_dur = max(0.1, round(actual_end - start_time, 1))
 
                     c_words = words[start_idx : end_idx + 1]
-                    hook = c_words[:10]
 
                     raw_end = get_w_word(w_end)
                     has_punct = any(p in raw_end for p in [".", "!", "?", "\u0964", "\u061f", "\u2026"])
@@ -362,7 +413,7 @@ def detect_viral_clips(
                         "end": round(actual_end, 2),
                         "duration": actual_dur,
                         "words": c_words,
-                        "hook_words": hook,
+                        "hook_words": c_words[:12],
                         "virality_score": total_virality,
                         "score_breakdown": breakdown
                     })
@@ -385,25 +436,8 @@ def detect_viral_clips(
                 })
             t += (step * 0.8)
 
-    # Sort candidates by virality score descending
-    candidates.sort(key=lambda c: c["virality_score"], reverse=True)
-
-    # Step 3: Select top non-overlapping clips
-    selected = []
-    for cand in candidates:
-        if len(selected) >= target_clips_count:
-            break
-
-        # Allow max 8.0s overlap between distinct clips
-        overlaps = False
-        for s in selected:
-            overlap_len = min(cand["end"], s["end"]) - max(cand["start"], s["start"])
-            if overlap_len > 8.0:
-                overlaps = True
-                break
-
-        if not overlaps:
-            selected.append(cand)
+    # Step 3: the best distinct moments (automatic count unless a number was asked for)
+    selected = select_clips(candidates, target_clips_count, total_duration)
 
     # Sort selected chronologically for clean playback
     selected.sort(key=lambda c: c["start"])
@@ -425,12 +459,18 @@ def detect_viral_clips(
             "end": c["end"],
             "duration": c["duration"],
             "virality_score": c["virality_score"],
+            "tier": tier_for(c["virality_score"]),
+            "rank": 0,
             "keywords": keywords,
             "transcript_snippet": snippet,
             "language": pack["lang"],
             "score_breakdown": c.get("score_breakdown", {}),
             "words": c_words
         })
+
+    # Rank 1 = the best short, so the list can be read in time order and still show which one to post first
+    for rank, c in enumerate(sorted(result_clips, key=lambda c: -c["virality_score"]), 1):
+        c["rank"] = rank
 
     if api_keys:
         result_clips = generate_ai_titles_with_groq(result_clips, api_keys)

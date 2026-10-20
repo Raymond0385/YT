@@ -92,6 +92,14 @@ RU_POWER = _set("""
 EN_BACKREF = _set("this that these those it they he she them his her its such")
 RU_BACKREF = _set("это этот эта эти тот та те он она оно они его ее их там такой такая такие")
 
+# Verbal fillers: a lot of them means rambling (narrower than the *_FILLERS start-of-clip lists)
+EN_VERBAL = _set("um uh umm uhh erm like basically actually literally okay ok yeah well whatever")
+RU_VERBAL = _set("ну вот короче значит типа вообще блин эээ ээ ммм мм ага щас")
+
+# Talking to the viewer keeps them watching
+EN_ADDRESS = _set("you your you're youre yourself aap aapko aapka tum tumhe")
+RU_ADDRESS = _set("вы вам вас ваш ваша ваше ваши ты тебе тебя твой твоя твое твои")
+
 EN_TERMINAL_VERBS = _set("""
 hai hain tha thi thay the hoga hogi honge gaya gayi gaye chahiye raha rahi rahe karo karein kare karna hona sakta
 sakti sakte diya liya karega karegi karenge chuka chuki chuke milta milti milte dekha socha samjha bana banaya
@@ -101,13 +109,13 @@ aaya aayi aaye raho dekho sikho seekho kaho suno jao aao chalo batao samjho sake
 PACKS: Dict[str, Dict[str, Any]] = {
     "en": {
         "lang": "en", "dangling": EN_DANGLING, "fillers": EN_FILLERS, "hook": EN_HOOK, "question": EN_QUESTION,
-        "power": EN_POWER, "backref": EN_BACKREF, "terminal_verbs": EN_TERMINAL_VERBS,
+        "power": EN_POWER, "backref": EN_BACKREF, "terminal_verbs": EN_TERMINAL_VERBS, "address": EN_ADDRESS, "verbal": EN_VERBAL,
         "wpm_ok": (120, 190), "wpm_ideal": 150,
         "question_substrings": ("why", "how", "what", "did you know", "is it possible", "kya", "kaise", "kyun"),
     },
     "ru": {
         "lang": "ru", "dangling": RU_DANGLING, "fillers": RU_FILLERS, "hook": RU_HOOK, "question": RU_QUESTION,
-        "power": RU_POWER, "backref": RU_BACKREF, "terminal_verbs": frozenset(),
+        "power": RU_POWER, "backref": RU_BACKREF, "terminal_verbs": frozenset(), "address": RU_ADDRESS, "verbal": RU_VERBAL,
         # Russian words are longer, so fewer words per minute is normal
         "wpm_ok": (100, 165), "wpm_ideal": 130,
         "question_substrings": ("почему", "зачем", "как ", "что ", "сколько", "а вы знали", "знаете ли"),
@@ -135,8 +143,8 @@ def _num(w: Any, key: str, default: float = 0.0) -> float:
 def hook_score(hook_words: List[Any], pack: Dict[str, Any]) -> float:
     """Curiosity score (0..100) for the opening words."""
     if not hook_words:
-        return 50.0
-    score = 50.0
+        return 25.0
+    score = 25.0
     cleaned = [_norm(_word(w)) for w in hook_words]
     text = " ".join(cleaned) + " "
 
@@ -150,19 +158,37 @@ def hook_score(hook_words: List[Any], pack: Dict[str, Any]) -> float:
     return min(100.0, score)
 
 
+HOOK_SECONDS = 3.5          # the hook is what is said in the first seconds, before viewers swipe away
+
+# Quality tiers shown to the user
+TIER_STRONG = 75
+TIER_GOOD = 62
+
+
+def tier_for(score: float) -> str:
+    return "strong" if score >= TIER_STRONG else "good" if score >= TIER_GOOD else "fair"
+
+
+def hook_words_of(c_words: List[Any], start: float) -> List[Any]:
+    """Words of the first HOOK_SECONDS (at least 5, at most 14 words)."""
+    first = [w for w in c_words[:14] if _num(w, "start") < start + HOOK_SECONDS]
+    return first if len(first) >= 5 else c_words[:5]
+
+
 def score_candidate(c_words: List[Any], start: float, end: float, end_gap: float,
                     ends_with_punct: bool, ends_with_terminal_verb: bool,
                     pack: Dict[str, Any]) -> Tuple[int, Dict[str, float]]:
     """
     Virality score 1..99 and a breakdown of what contributed.
-      hook (0-42) + keywords (0-20) + pacing (0-15) + ending (0-16) + length (0-8) + power words (0-6)
-      - dead air (0-12) - weak start (0-7) - uncertain recognition (0-10)
+      hook (0-38) + keywords (0-20) + pacing (0-15) + ending (0-16) + length (0-8) + power words (0-6)
+      + engagement (0-8) - repetition (0-6) - rambling (0-10) - dead air (0-12) - weak start (0-7)
+      - uncertain recognition (0-10)
     """
     duration = max(0.1, end - start)
     n = max(1, len(c_words))
     parts: Dict[str, float] = {}
 
-    parts["hook"] = hook_score(c_words[:10], pack) * 0.42
+    parts["hook"] = hook_score(hook_words_of(c_words, start), pack) * 0.38
 
     kw = sum(1 for w in c_words if (w.get("keyword") if isinstance(w, dict) else getattr(w, "keyword", False)))
     parts["keywords"] = min(20.0, (kw / n) * 100.0)
@@ -188,6 +214,23 @@ def score_candidate(c_words: List[Any], start: float, end: float, end_gap: float
     cleaned = [_norm(_word(w)) for w in c_words]
     parts["power"] = min(6.0, 2.0 * sum(1 for c in cleaned if c in pack["power"]))
 
+    # Engagement: talking to the viewer, questions and exclamations along the way
+    address = sum(1 for c in cleaned if c in pack.get("address", ()))
+    marks = sum(1 for w in c_words[3:] if any(m in _word(w) for m in "?!"))
+    parts["engagement"] = min(4.0, address / n * 100.0 * 0.5) + min(4.0, float(marks))
+
+    # Lots of "um / ну / короче / типа" means rambling
+    verbal = sum(1 for c in cleaned if c in pack.get("verbal", ()))
+    parts["rambling"] = -min(10.0, max(0.0, verbal / n - 0.03) * 100.0)
+
+    # Saying the same thing over and over (or a recognition loop) is boring
+    content = [c for c in cleaned if len(c) > 3]
+    if len(content) >= 12:
+        ratio = len(set(content)) / len(content)
+        parts["repetition"] = -min(6.0, max(0.0, 0.45 - ratio) * 20.0)
+    else:
+        parts["repetition"] = 0.0
+
     # Dead air inside the clip makes it drag
     dead = 0
     for a, b in zip(c_words, c_words[1:]):
@@ -211,5 +254,5 @@ def score_candidate(c_words: List[Any], start: float, end: float, end_gap: float
     else:
         parts["recognition"] = 0.0
 
-    total = sum(parts.values()) + 10.0
+    total = sum(parts.values()) + 8.0
     return min(99, max(1, int(round(total)))), {k: round(v, 1) for k, v in parts.items()}

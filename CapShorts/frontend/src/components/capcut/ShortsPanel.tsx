@@ -10,6 +10,16 @@ import { batchSummary, BatchItem, runBatchExport } from '../../utils/batchExport
 import templatesData from '../../data/templates.json';
 import { SubtitlePreset } from '../../types';
 
+/** The detection's tier, or one derived from the score for shorts made before tiers existed. */
+export const clipTier = (c: { tier?: 'strong' | 'good' | 'fair'; virality_score: number }) =>
+  c.tier ?? (c.virality_score >= 75 ? 'strong' : c.virality_score >= 62 ? 'good' : 'fair');
+
+const TIER_STYLE = {
+  strong: 'text-emerald-300 bg-emerald-500/15 border-emerald-500/30',
+  good: 'text-sky-300 bg-sky-500/15 border-sky-500/30',
+  fair: 'text-zinc-300 bg-zinc-700/40 border-white/10',
+} as const;
+
 const inputCls =
   'bg-zinc-950/80 border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-indigo-500 transition-colors';
 const smallBtn =
@@ -46,6 +56,14 @@ export const ShortsPanel: React.FC = () => {
   );
 
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [autoCount, setAutoCount] = useState(true);
+  const [onlyStrong, setOnlyStrong] = useState(false);
+  const tierCounts = useMemo(() => {
+    const t = { strong: 0, good: 0, fair: 0 };
+    for (const c of clips) t[clipTier(c)] += 1;
+    return t;
+  }, [clips]);
+  const visibleClips = onlyStrong ? clips.filter((c) => clipTier(c) === 'strong' || c.id === editingId) : clips;
   const editingClip = clips.find((c) => c.id === editingId) || null;
   // Words of the short being edited (indexes into the transcript), for editing its captions in place
   const editingWords = useMemo(
@@ -140,14 +158,14 @@ export const ShortsPanel: React.FC = () => {
           duration: duration || 60,
           min_clip_duration: Math.max(1, minLen),
           max_clip_duration: Math.max(minLen, maxLen),
-          target_clips_count: Math.max(1, count),
+          ...(autoCount ? {} : { target_clips_count: Math.max(1, count) }),
         }),
       });
       if (res.ok) {
         const data = await res.json();
         setClips(data.clips || []);
         setEditingId(null);
-        setNote(`${(data.clips || []).length} short(s) found`);
+        setNote(null);
       } else {
         setNote('Could not detect shorts');
       }
@@ -194,6 +212,26 @@ export const ShortsPanel: React.FC = () => {
         </div>
       </div>
 
+      {clips.length > 0 && (
+        <div className="p-2.5 rounded-xl bg-zinc-900/60 border border-white/[0.06] space-y-1.5" data-testid="shorts-summary">
+          <div className="text-[11px] text-zinc-200">
+            <span className="font-bold text-white">{clips.length} short{clips.length === 1 ? '' : 's'}</span>
+            {duration > 0 && <span className="text-zinc-400"> from the whole video ({formatTime(duration)})</span>}
+          </div>
+          <div className="flex items-center gap-1.5 text-[10px]">
+            <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30" data-testid="tier-strong">{tierCounts.strong} strong</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30" data-testid="tier-good">{tierCounts.good} good</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-zinc-700/40 text-zinc-300 border border-white/10" data-testid="tier-fair">{tierCounts.fair} fair</span>
+            {tierCounts.strong > 0 && tierCounts.strong < clips.length && (
+              <label className="ml-auto flex items-center space-x-1 text-zinc-400">
+                <input type="checkbox" checked={onlyStrong} onChange={(e) => setOnlyStrong(e.target.checked)} data-testid="only-strong" />
+                <span>strong only</span>
+              </label>
+            )}
+          </div>
+        </div>
+      )}
+
       {showSettings && (
         <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-zinc-900/60 border border-white/[0.06]" data-testid="shorts-settings">
           <label className="text-[10px] text-zinc-400 space-y-1">
@@ -205,8 +243,20 @@ export const ShortsPanel: React.FC = () => {
             <input type="number" min={5} max={180} value={maxLen} onChange={(e) => setMaxLen(Number(e.target.value) || 60)} className={`${inputCls} w-full`} />
           </label>
           <label className="text-[10px] text-zinc-400 space-y-1">
-            <span>How many</span>
-            <input type="number" min={1} max={20} value={count} onChange={(e) => setCount(Number(e.target.value) || 1)} className={`${inputCls} w-full`} />
+            <span className="flex items-center justify-between">
+              <span>How many</span>
+              <span className="flex items-center space-x-1">
+                <input type="checkbox" checked={autoCount} onChange={(e) => setAutoCount(e.target.checked)} data-testid="auto-count" />
+                <span>Auto</span>
+              </span>
+            </span>
+            {autoCount ? (
+              <div className="text-[10px] text-zinc-500 leading-tight py-1" title="Every distinct moment that is good enough, about one per 2 minutes of video at most">
+                as many as the video gives
+              </div>
+            ) : (
+              <input type="number" min={1} max={40} value={count} onChange={(e) => setCount(Number(e.target.value) || 1)} className={`${inputCls} w-full`} data-testid="count-input" />
+            )}
           </label>
         </div>
       )}
@@ -299,7 +349,7 @@ export const ShortsPanel: React.FC = () => {
       )}
 
       <div className="space-y-2.5">
-        {clips.map((clip) => {
+        {visibleClips.map((clip) => {
           const isSelected = selectedClipId === clip.id;
           const isEditing = editingId === clip.id;
           return (
@@ -324,9 +374,13 @@ export const ShortsPanel: React.FC = () => {
                       {clip.virality_score > 0 ? 'Edited' : 'Custom'}
                     </span>
                   ) : (
-                    <div className="flex items-center space-x-1 text-[10px] font-bold text-amber-300 bg-amber-500/15 px-2 py-0.5 rounded-full border border-amber-500/30">
-                      <Flame className="w-3 h-3 fill-amber-400 text-amber-400" />
-                      <span>{clip.virality_score}%</span>
+                    <div
+                      className={`flex items-center space-x-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${TIER_STYLE[clipTier(clip)]}`}
+                      title={clip.rank ? `#${clip.rank} of ${clips.length} in this video` : undefined}
+                      data-testid="short-tier"
+                    >
+                      <Flame className="w-3 h-3" />
+                      <span>{clip.rank ? `#${clip.rank} · ` : ''}{clip.virality_score}</span>
                     </div>
                   )}
                   <button
