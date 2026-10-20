@@ -5,6 +5,27 @@ All notable changes to Kadr (formerly CapShorts) are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Extra tracks on the timeline: video layers (picture in picture: position, size, opacity, fades) and sounds (music, voice-over: volume, fades). Add files with + on a track, drag and trim them; the preview plays them in sync and the export renders them.
+- Fade from / to black (and silence) at the start and end of the export (Audio tab of the inspector).
+- Hook title over the first seconds of a short: text, length and style per short, with a suggestion from the hook; the preview shows it exactly as rendered.
+- The preview follows the speaker's face in vertical shorts, like the export (Follow face / Whole picture toggle).
+- Own subtitle presets: Save current style, My presets, delete, import and export as a file; a project carries its preset.
+- Export all settings: which shorts (all / strong and good / strong), format, framing, subtitles, emoji, hook titles, file names.
+- Make shorts from several videos at once: each one is recognised, its shorts found and rendered with the current style.
+- What's new after an update, a notice when a newer version is out (with its changes, one-click update), the list of versions in Settings with Roll back, and an offer to put the previous version back when the engine does not start after an update.
+
+### Changed
+- Shorts detection finds as many shorts as the whole video gives (about one per 2 minutes at most, only those good enough) instead of a fixed 5, and marks them strong / good / fair with a rank; better scoring of the first seconds, engagement and rambling.
+
+### Fixed
+- The export ignored the edit on the timeline: cuts (Remove dead air, deleted segments), speed and volume were preview-only, so captions drifted after the first cut.
+- In-app update from 1.4.2 was killed together with Kadr (the installer was started inside the app's process group); the installer now restarts itself outside it.
+- A short without words got the captions of the whole video.
+- The Export window kept the format it had when the app started.
+
 ## [1.4.2] - 2026-10-20
 
 ### Added

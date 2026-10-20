@@ -127,6 +127,8 @@ jobs:
             --hidden-import "reframe" `
             --hidden-import "media_store" `
             --hidden-import "parent_watch" `
+            --hidden-import "updates" `
+            --hidden-import "timeline_render" `
             --collect-all "cv2" `
             --collect-submodules "yt_dlp" `
             --collect-all "yt_dlp_ejs" `
@@ -172,6 +174,8 @@ jobs:
             --hidden-import "reframe" \
             --hidden-import "media_store" \
             --hidden-import "parent_watch" \
+            --hidden-import "updates" \
+            --hidden-import "timeline_render" \
             --collect-all "cv2" \
             --collect-submodules "yt_dlp" \
             --collect-all "yt_dlp_ejs" \
