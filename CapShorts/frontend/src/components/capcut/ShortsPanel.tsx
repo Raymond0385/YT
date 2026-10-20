@@ -9,6 +9,9 @@ import { suggestTitle, TITLE_DEFAULT_SECONDS, TITLE_STYLES, TitleStyle } from '.
 import { buildExportPayload, shortFileName } from '../../utils/exportPayload';
 import { batchSummary, BatchItem, runBatchExport } from '../../utils/batchExport';
 import { findPreset } from '../../utils/presets';
+import { exportFileName, ExportAllSettings, loadExportAllSettings, pickClips, saveExportAllSettings } from '../../utils/exportAllSettings';
+import { ExportAllSettingsForm } from './ExportAllSettingsForm';
+import { BatchVideosModal } from './BatchVideosModal';
 import { SubtitlePreset } from '../../types';
 
 /** The detection's tier, or one derived from the score for shorts made before tiers existed. */
@@ -84,9 +87,13 @@ export const ShortsPanel: React.FC = () => {
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchDir, setBatchDir] = useState('');
   const stopRef = useRef(false);
+  const [exportAllSettings, setExportAllSettings] = useState<ExportAllSettings>(loadExportAllSettings);
+  const [showExportSettings, setShowExportSettings] = useState(false);
+  const [batchVideosOpen, setBatchVideosOpen] = useState(false);
+  const exportList = pickClips(clips, exportAllSettings.which);
 
   const exportAll = async () => {
-    if (!clips.length || batchRunning) return;
+    if (!exportList.length || batchRunning) return;
     if (!videoFile && !serverVideoPath) {
       setNote('Open a video first.');
       return;
@@ -94,7 +101,7 @@ export const ShortsPanel: React.FC = () => {
     setNote(null);
     setBatchRunning(true);
     stopRef.current = false;
-    setBatchItems(clips.map((c) => ({ clipId: c.id, title: c.title, status: 'queued', progress: 0 })));
+    setBatchItems(exportList.map((c) => ({ clipId: c.id, title: c.title, status: 'queued', progress: 0 })));
     try {
       fetch(apiUrl('/api/export/settings')).then((r) => (r.ok ? r.json() : null)).then((d) => d?.export_dir && setBatchDir(d.export_dir)).catch(() => undefined);
 
@@ -110,15 +117,20 @@ export const ShortsPanel: React.FC = () => {
       }
 
       const preset = findPreset(activeTemplateId, useVideoStore.getState().userPresets);
-      const list = [...clips].sort((a, b) => a.start - b.start);
+      const list = exportList;
+      const ea = exportAllSettings;
+      const videoName = useVideoStore.getState().videoName || videoFile?.name || 'video';
       await runBatchExport({
         clips: list,
         buildPayload: (clip, index) =>
           buildExportPayload({
-            videoPath, transcript, preset, customStyleOverrides, brollList, showEmojis,
-            outputFilename: shortFileName(index, clip.title, list.length),
-            resolution: '1080x1920',
-            clip,
+            videoPath, preset, customStyleOverrides, brollList,
+            transcript: ea.subtitles ? transcript : [],
+            showEmojis: showEmojis && ea.emoji && ea.subtitles,
+            outputFilename: exportFileName(ea.naming, index, clip, list.length, videoName),
+            resolution: ea.resolution,
+            framing: ea.framing,
+            clip: ea.hookTitle ? clip : { start: clip.start, end: clip.end },
           }),
         onUpdate: setBatchItems,
         shouldStop: () => stopRef.current,
@@ -280,13 +292,39 @@ export const ShortsPanel: React.FC = () => {
           title="Render every short into the export folder"
         >
           <Layers className="w-3.5 h-3.5" />
-          <span>Export all ({clips.length})</span>
+          <span>Export {exportAllSettings.which === 'all' ? 'all' : exportAllSettings.which === 'strong' ? 'strong' : 'best'} ({exportList.length})</span>
+        </button>
+        <button
+          onClick={() => setShowExportSettings((v) => !v)}
+          className={`text-[10px] px-2 py-1 rounded-lg border transition-colors ${showExportSettings ? 'bg-indigo-500/25 border-indigo-400/50 text-white' : 'bg-zinc-950/80 border-white/[0.08] text-zinc-300 hover:bg-zinc-800'}`}
+          title="How Export all renders: which shorts, format, framing, subtitles, file names"
+          data-testid="export-all-settings-toggle"
+        >
+          ⚙
         </button>
         <label className="flex items-center space-x-1.5 text-[10px] text-zinc-400 cursor-pointer">
           <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} className="accent-indigo-500" />
           <span>Snap to words</span>
         </label>
       </div>
+      {showExportSettings && (
+        <div className="p-2.5 rounded-xl bg-zinc-900/60 border border-white/[0.06] space-y-2">
+          <ExportAllSettingsForm
+            value={exportAllSettings}
+            onChange={(v) => { setExportAllSettings(v); saveExportAllSettings(v); }}
+            exportDir={batchDir || undefined}
+          />
+          <button
+            onClick={() => setBatchVideosOpen(true)}
+            className="w-full flex items-center justify-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-white/10 text-[11px] text-zinc-200"
+            data-testid="open-batch-videos"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>Make shorts from several videos...</span>
+          </button>
+        </div>
+      )}
+      <BatchVideosModal open={batchVideosOpen} onClose={() => { setBatchVideosOpen(false); setExportAllSettings(loadExportAllSettings()); }} />
       {note && <p className="text-[10px] text-zinc-400">{note}</p>}
 
       {batchItems.length > 0 && (
