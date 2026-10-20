@@ -17,6 +17,8 @@ import {
   Upload
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
+import { followLayout, useReframePlan } from '../../utils/reframePreview';
+import { Framing, loadFraming, saveFraming } from '../../utils/exportPayload';
 import { TITLE_EM_PER_LINE, TITLE_FONT_REL, TITLE_PAD_REL, TITLE_SIDE_REL, TITLE_STYLES, TITLE_TOP_REL, titleVisibleAt } from '../../utils/titleOverlay';
 import { useVideoStore } from '../../store/useVideoStore';
 import { SubtitlePreset, WordToken } from '../../types';
@@ -129,6 +131,12 @@ export const CanvasPreview: React.FC = () => {
   const queuedSeekTimeRef = useRef<number | null>(null);
   const videoSegmentsRef = useRef(videoSegments);
   videoSegmentsRef.current = videoSegments;
+  // Vertical short from a landscape video: show the same framing the export makes (following the speaker)
+  const [framing, setFraming] = useState<Framing>(loadFraming);
+  const followWanted = aspectRatio === '9:16' && !!activeClip && framing === 'auto';
+  const { plan: reframePlan, loading: reframeLoading } = useReframePlan(activeClip, followWanted);
+  const following = followWanted && reframePlan?.mode === 'follow';
+
   const activeClipRef = useRef(activeClip);
   activeClipRef.current = activeClip;
 
@@ -426,6 +434,22 @@ export const CanvasPreview: React.FC = () => {
 
         {/* Center Aspect tag & Mode */}
         <div className="flex items-center space-x-2">
+          {aspectRatio === '9:16' && activeClip && (
+            <button
+              onClick={() => { const next: Framing = framing === 'auto' ? 'blur' : 'auto'; setFraming(next); saveFraming(next); }}
+              className={`text-[11px] px-2 py-0.5 rounded-md border transition-colors ${
+                framing === 'auto' ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-200' : 'bg-white/[0.04] border-white/[0.08] text-zinc-400 hover:text-white'
+              }`}
+              title={framing === 'auto'
+                ? (reframeLoading ? 'Finding the speaker...' : reframePlan && reframePlan.mode !== 'follow' ? `Blurred background in the export: ${reframePlan.reason || 'no face'}` : 'The short follows the speaker, like the export')
+                : 'The export puts the whole picture on a blurred background'}
+              data-testid="follow-face-toggle"
+            >
+              {framing === 'auto'
+                ? (reframeLoading ? 'Face: finding...' : reframePlan && reframePlan.mode === 'blur' ? 'Face: none found' : 'Follow face')
+                : 'Whole picture'}
+            </button>
+          )}
           <div className="text-[11px] font-mono text-zinc-300 bg-white/[0.05] border border-white/[0.08] px-2.5 py-0.5 rounded-md">
             {aspectRatio} {aspectRatio === '9:16' ? 'Vertical Short' : aspectRatio === '16:9' ? 'Landscape' : 'Square'}
           </div>
@@ -521,13 +545,19 @@ export const CanvasPreview: React.FC = () => {
             <video
               ref={videoRef}
               src={videoUrl}
-              className={`w-full h-full relative z-10 transition-transform duration-75 ${
-                videoFitMode === 'cover' ? 'object-cover' : 'object-contain'
-              }`}
-              style={{
-                transform: `translate(${videoPosition.x}px, ${videoPosition.y}px) scale(${effectiveScale})`,
-                transformOrigin: 'center center',
-              }}
+              className={following
+                ? 'absolute top-0 z-10 max-w-none'
+                : `w-full h-full relative z-10 transition-transform duration-75 ${videoFitMode === 'cover' ? 'object-cover' : 'object-contain'}`}
+              style={following && reframePlan
+                ? (() => {
+                    const l = followLayout(reframePlan, currentTime, stageH);
+                    return { width: `${l.width}px`, height: `${l.height}px`, left: `${l.left}px`, objectFit: 'fill' as const };
+                  })()
+                : {
+                    transform: `translate(${videoPosition.x}px, ${videoPosition.y}px) scale(${effectiveScale})`,
+                    transformOrigin: 'center center',
+                  }}
+              data-following={following ? '1' : undefined}
               playsInline
               onTimeUpdate={handleTimeUpdate}
               onSeeked={handleSeeked}

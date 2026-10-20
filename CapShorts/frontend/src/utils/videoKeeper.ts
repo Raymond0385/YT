@@ -9,7 +9,8 @@ import { useVideoStore } from '../store/useVideoStore';
 // One kept-id per video file, so the autosave does not upload the same video again every few seconds.
 const kept = new WeakMap<File, Promise<string | null>>();
 
-async function ensureOnEngine(file: File, serverPath: string | null): Promise<string | null> {
+/** The engine's name for the video, uploading it first when the engine does not have it yet. */
+export async function ensureOnEngine(file: File, serverPath: string | null): Promise<string | null> {
   if (serverPath) return serverPath;
   const form = new FormData();
   form.append('file', file);

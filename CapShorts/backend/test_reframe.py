@@ -164,3 +164,29 @@ def test_plan_without_a_model_falls_back(monkeypatch):
 def test_the_bundled_model_is_found():
     path = rf.find_model()
     assert path and os.path.basename(path) == rf.MODEL_NAME and os.path.getsize(path) > 100_000
+
+
+def test_plan_endpoint_returns_the_camera_path_and_caches_it(monkeypatch, tmp_path):
+    import os
+    os.environ["CAPSHORTS_TESTING"] = "1"
+    from fastapi.testclient import TestClient
+    import engine
+    client = TestClient(engine.app)
+    video = tmp_path / "input_x.mp4"
+    video.write_bytes(b"fake")
+    monkeypatch.setattr(engine, "TEMP_DIR", str(tmp_path))
+    monkeypatch.setattr(engine, "probe_video_dimensions", lambda p: (1920, 1080))
+    calls = []
+
+    def plan(path, start, end, w, h):
+        calls.append((start, end))
+        return {"mode": "follow", "reason": "following the speaker", "crop_w": 606, "crop_h": 1080, "xs": [600, 610], "rate": 10.0}
+    monkeypatch.setattr(engine.reframe, "plan_reframe", plan)
+    body = {"video_path": "input_x.mp4", "start": 10, "end": 40}
+    r = client.post("/api/reframe/plan", json=body).json()
+    assert r["mode"] == "follow" and r["src_w"] == 1920 and r["xs"] == [600, 610] and r["start"] == 10
+    client.post("/api/reframe/plan", json=body)
+    assert len(calls) == 1                                    # the second request is served from the cache
+    monkeypatch.setattr(engine, "probe_video_dimensions", lambda p: (1080, 1920))
+    assert client.post("/api/reframe/plan", json={**body, "end": 30}).json()["mode"] == "none"
+    assert client.post("/api/reframe/plan", json={"video_path": "../x.mp4", "start": 0, "end": 5}).status_code == 404

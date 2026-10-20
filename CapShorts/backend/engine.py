@@ -1594,6 +1594,35 @@ def resolve_video_file(path: Optional[str]) -> str:
             return cand
     raise HTTPException(status_code=404, detail="Video file not found")
 
+class ReframePlanPayload(BaseModel):
+    video_path: str
+    start: float = Field(ge=0.0)
+    end: float = Field(gt=0.0)
+
+REFRAME_PLAN_CACHE: Dict[Tuple[str, float, float, float], Dict[str, Any]] = {}
+
+@app.post("/api/reframe/plan")
+def reframe_plan(payload: ReframePlanPayload):
+    """
+    The camera path the export uses to follow the speaker in a vertical short, so the editor preview can show the
+    same framing: left edge of the crop window (source pixels) every 1/rate seconds from `start`.
+    """
+    input_video = resolve_video_file(payload.video_path)
+    if payload.end <= payload.start:
+        raise HTTPException(status_code=400, detail="end must be after start")
+    key = (input_video, round(payload.start, 2), round(payload.end, 2), os.path.getmtime(input_video))
+    if key not in REFRAME_PLAN_CACHE:
+        w, h = probe_video_dimensions(input_video)
+        if w <= h:
+            plan = {"mode": "none", "reason": "the video is already vertical"}
+        else:
+            plan = reframe.plan_reframe(input_video, payload.start, payload.end, w, h)
+        plan.update(src_w=w, src_h=h, start=payload.start)
+        if len(REFRAME_PLAN_CACHE) > 64:
+            REFRAME_PLAN_CACHE.clear()
+        REFRAME_PLAN_CACHE[key] = plan
+    return REFRAME_PLAN_CACHE[key]
+
 class SilenceDetectPayload(BaseModel):
     video_path: Optional[str] = None
     noise_threshold_db: Optional[float] = -30.0
