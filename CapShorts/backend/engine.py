@@ -64,7 +64,7 @@ try:
 except Exception as _speech_import_error:
     print(f"[engine] speech stack unavailable: {_speech_import_error}")
 
-app = FastAPI(title="Kadr AI Engine", version="1.4.2")
+app = FastAPI(title="Kadr AI Engine", version="1.5.0")
 
 def get_ffmpeg_bin() -> str:
     """Resolves platform-appropriate FFmpeg executable."""
@@ -2001,7 +2001,7 @@ def download_subtitles_file(filename: str):
     media_type = "application/x-subrip" if filename.endswith(".srt") else "text/vtt" if filename.endswith(".vtt") else "text/plain"
     return FileResponse(path, media_type=media_type, filename=os.path.basename(path))
 
-CURRENT_ENGINE_VERSION = "1.4.2"
+CURRENT_ENGINE_VERSION = "1.5.0"
 # GitHub repo the in-app updater checks for releases (owner/name)
 UPDATE_REPO = os.environ.get("CAPSHORTS_UPDATE_REPO", "Raymond0385/YT")
 

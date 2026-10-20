@@ -5,7 +5,7 @@ All notable changes to Kadr (formerly CapShorts) are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.5.0] - 2026-10-21
 
 ### Added
 - Extra tracks on the timeline: video layers (picture in picture: position, size, opacity, fades) and sounds (music, voice-over: volume, fades). Add files with + on a track, drag and trim them; the preview plays them in sync and the export renders them.

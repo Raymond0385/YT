@@ -1,6 +1,6 @@
 [package]
 name = "kadr"
-version = "1.4.2"
+version = "1.5.0"
 description = "Kadr - Desktop AI Video Editor"
 authors = ["Kadr contributors"]
 edition = "2021"
